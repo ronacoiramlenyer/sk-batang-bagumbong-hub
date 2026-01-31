@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container dashboard">
+
+    <!-- Avatar -->
+    <div class="avatar">
+        <div id="avatarCircle" class="avatar-circle">
+            <span id="avatarInitials"></span>
+        </div>
+    </div>
+    <!-- Welcome -->
+    <h1 id="welcomeName">Welcome!</h1>
+    <p class="dashboard-subtext">
+      What would you like to do today?
+    </p>
+
+
+
+    <!-- Action choices -->
+    <div class="dashboard-actions">
+      <button class="action-card">
+        Join an Event
+      </button>
+
+      <button class="action-card">
+        View My Joined Events
+      </button>
+
+      <button class="action-card">
+        Update My Profile
+      </button>
+    </div>
+
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <script src="app.js"></script>
+</body>
+</html>

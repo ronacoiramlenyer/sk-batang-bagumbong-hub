@@ -1,0 +1,161 @@
+A. Firebase Project Configuration (Dev and Prod)
+
+Create two separate Firebase projects:
+
+One labeled Development
+
+One labeled Production
+
+For each project, enable Email/Password Authentication.
+
+For each project, create a Firestore Database.
+
+Set Firestore to test mode during initial setup.
+
+Register a Web App in each Firebase project.
+
+Record the Firebase configuration parameters for each project:
+
+apiKey
+
+authDomain
+
+projectId
+
+storageBucket
+
+messagingSenderId
+
+appId
+
+B. Local Development Setup
+
+Create a local project directory for the website.
+
+Define a configuration selection mechanism to switch between:
+
+Development Firebase configuration
+
+Production Firebase configuration
+
+Initialize Firebase using the Development configuration during testing.
+
+Verify that all authentication and database operations point to the Development project.
+
+C. Authentication and User Management
+
+Implement user registration using Firebase Authentication.
+
+Upon successful registration, create a corresponding user document in Firestore.
+
+Store user metadata including:
+
+user ID
+
+email
+
+role (default: user)
+
+Manually assign the admin role to selected users via Firestore.
+
+Enforce authentication checks before allowing access to protected pages.
+
+D. Role-Based Access Control
+
+Restrict access to the admin interface based on user role.
+
+Redirect unauthorized users attempting to access admin resources.
+
+Prevent unauthenticated users from accessing internal pages.
+
+E. Event Management (Admin Operations)
+
+Provide an admin-only interface for event creation.
+
+Capture event attributes:
+
+title
+
+description
+
+date
+
+creator ID
+
+timestamp
+
+Store events as individual documents in an events collection.
+
+Ensure event creation operations are only permitted for admin users.
+
+F. Event Feed Distribution (User Operations)
+
+Retrieve the list of events from the events collection.
+
+Display events on the user dashboard in a feed-style layout.
+
+Ensure event data is read-only for non-admin users.
+
+G. Event Registration Workflow
+
+Allow authenticated users to register for an event.
+
+On registration, create a record in a registrations collection.
+
+Store references to:
+
+event ID
+
+user ID
+
+registration timestamp
+
+Prevent duplicate registrations for the same user-event pair.
+
+Reflect registration status in the user interface.
+
+H. Data Architecture Enforcement
+
+Maintain separate collections for:
+
+users
+
+events
+
+registrations
+
+Treat registrations as relational records, not embedded objects.
+
+Ensure all records are traceable to authenticated users.
+
+I. Security Rules Implementation
+
+Define Firestore rules to allow read/write access only to authenticated users.
+
+Restrict event creation and modification to admin roles.
+
+Restrict registration creation to the authenticated user only.
+
+Prevent users from modifying or deleting records they do not own.
+
+J. Deployment to Production
+
+Switch Firebase configuration from Development to Production.
+
+Build the final production-ready version of the website.
+
+Deploy the site to GitHub Pages.
+
+Verify that the deployed site connects exclusively to the Production Firebase project.
+
+Perform post-deployment validation using production accounts only.
+
+K. Operational Lifecycle
+
+Use the Development project for future testing and feature validation.
+
+Apply changes to Production only after validation in Development.
+
+Monitor Firebase usage to ensure activity remains within free-tier limits.
+
+Decommission the system at end-of-life by disabling authentication and database access.
