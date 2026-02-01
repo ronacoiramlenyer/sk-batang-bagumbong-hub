@@ -18,7 +18,7 @@
   box-sizing: border-box;
 }
 
-/* 🔴 CRITICAL FIX: RESET NATIVE BUTTON STYLES */
+/* Reset native button styles (intentional) */
 button {
   all: unset;
   box-sizing: border-box;
@@ -41,7 +41,7 @@ body {
 }
 
 /* =========================
-   APP CONTAINER (DEVICE)
+   APP CONTAINER
    ========================= */
 
 .app-container {
@@ -58,32 +58,7 @@ body {
 }
 
 /* =========================
-   SCREENS (APP STATES)
-   ========================= */
-
-.screen {
-  display: none;
-  height: 100%;
-  animation: screenIn 0.25s ease;
-}
-
-.screen.active {
-  display: block;
-}
-
-@keyframes screenIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================
-   HEADINGS & TEXT
+   TYPOGRAPHY
    ========================= */
 
 h1 {
@@ -103,7 +78,7 @@ h2 {
 }
 
 /* =========================
-   PRIMARY ACTIONS
+   PRIMARY ACTIONS (INDEX)
    ========================= */
 
 .primary-actions button {
@@ -112,6 +87,7 @@ h2 {
   margin-bottom: 12px;
   font-size: 16px;
   border-radius: 12px;
+  text-align: center;
 }
 
 .login-btn {
@@ -174,7 +150,7 @@ button:active {
 }
 
 /* =========================
-   BACK LINK
+   BACK LINKS
    ========================= */
 
 .back-link {
@@ -209,7 +185,33 @@ button:active {
   text-align: left;
 }
 
-/* EVENTS */
+/* =========================
+   AVATAR
+   ========================= */
+
+.avatar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.avatar-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--green-primary);
+  border: 4px solid var(--orange-primary);
+  color: var(--light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: bold;
+}
+
+/* =========================
+   EVENTS
+   ========================= */
 
 .event-list {
   display: grid;
@@ -233,7 +235,9 @@ button:active {
   margin-bottom: 12px;
 }
 
-/* ACTION BUTTONS */
+/* =========================
+   ACTION BUTTONS
+   ========================= */
 
 .action-card {
   width: 100%;
@@ -255,7 +259,7 @@ button:active {
   font-size: 14px;
 }
 
-/* SECONDARY */
+/* Secondary actions */
 
 .action-card.secondary {
   border-color: var(--orange-primary);
@@ -266,7 +270,9 @@ button:active {
   color: var(--light);
 }
 
-/* ANNOUNCEMENTS */
+/* =========================
+   ANNOUNCEMENTS
+   ========================= */
 
 .announcement-list {
   display: grid;
@@ -289,7 +295,9 @@ button:active {
   color: #777;
 }
 
-/* ADMIN */
+/* =========================
+   ADMIN DASHBOARD
+   ========================= */
 
 .admin-dashboard {
   text-align: left;
@@ -321,4 +329,22 @@ button:active {
 .admin-card-actions {
   display: grid;
   gap: 12px;
+}
+
+/* =========================
+   FORM ERRORS
+   ========================= */
+
+.form-error {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fdecea;
+  color: #b00020;
+  font-size: 14px;
+  text-align: center;
+}
+
+.form-error.hidden {
+  display: none;
 }

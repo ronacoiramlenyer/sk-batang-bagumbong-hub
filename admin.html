@@ -9,62 +9,77 @@
 
 <body>
 
-  <div class="app-container admin">
+  <div class="app-container admin-dashboard">
 
-    <section id="adminDashboardScreen" class="screen active admin-dashboard">
+    <!-- HEADER -->
+    <div class="dashboard-header">
+      <h1>Admin Panel</h1>
+      <p class="dashboard-subtext">
+        Manage events, announcements, and user experience
+      </p>
+    </div>
 
-      <div class="dashboard-header">
-        <h1>Admin Panel</h1>
-        <p class="dashboard-subtext">
-          Manage events, announcements, and user experience
-        </p>
+    <!-- ACTIONS -->
+    <div class="admin-actions-grid">
+
+      <!-- EVENTS -->
+      <div class="admin-card">
+        <h2>Events</h2>
+        <p>Create, edit, or remove community events.</p>
+
+        <div class="admin-card-actions">
+          <button type="button" class="action-card">
+            Add Event
+          </button>
+          <button type="button" class="action-card secondary">
+            Manage Events
+          </button>
+        </div>
       </div>
 
-      <div class="admin-actions-grid">
+      <!-- ANNOUNCEMENTS -->
+      <div class="admin-card">
+        <h2>Announcements</h2>
+        <p>Post updates and important notices.</p>
 
-        <div class="admin-card">
-          <h2>Events</h2>
-          <p>Create, edit, or remove community events.</p>
-
-          <div class="admin-card-actions">
-            <button class="action-card">Add Event</button>
-            <button class="action-card secondary">Manage Events</button>
-          </div>
+        <div class="admin-card-actions">
+          <button type="button" class="action-card">
+            Add Announcement
+          </button>
+          <button type="button" class="action-card secondary">
+            Manage Announcements
+          </button>
         </div>
-
-        <div class="admin-card">
-          <h2>Announcements</h2>
-          <p>Post updates and important notices.</p>
-
-          <div class="admin-card-actions">
-            <button class="action-card">Add Announcement</button>
-            <button class="action-card secondary">Manage Announcements</button>
-          </div>
-        </div>
-
-        <div class="admin-card">
-          <h2>User View</h2>
-          <p>Preview how users see the dashboard.</p>
-
-          <div class="admin-card-actions">
-            <button class="action-card">Preview User Dashboard</button>
-          </div>
-        </div>
-
       </div>
 
-      <button id="logoutBtn" class="submit-btn">
-        Logout
-      </button>
+      <!-- USER VIEW -->
+      <div class="admin-card">
+        <h2>User View</h2>
+        <p>Preview how users see the dashboard.</p>
 
-    </section>
+        <div class="admin-card-actions">
+          <button type="button" class="action-card">
+            Preview User Dashboard
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" type="button" class="submit-btn">
+      Logout
+    </button>
 
   </div>
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
+  <!-- App Logic -->
   <script src="app.js"></script>
+
 </body>
 </html>

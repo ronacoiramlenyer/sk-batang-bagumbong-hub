@@ -11,69 +11,100 @@
 
   <div class="app-container">
 
-    <!-- WELCOME SCREEN -->
-    <section id="welcomeScreen" class="screen active">
+    <!-- WELCOME -->
+    <section id="welcomeSection">
       <h1>SK Batang Bagumbong Hub</h1>
       <p class="tagline">Connect. Join events. Be part of the community.</p>
 
       <div class="primary-actions">
-        <button id="showLoginBtn" class="login-btn">Log In</button>
-        <button id="showRegisterBtn" class="register-btn">Create Account</button>
+        <button id="showLoginBtn" type="button" class="login-btn">
+          Log In
+        </button>
+        <button id="showRegisterBtn" type="button" class="register-btn">
+          Create Account
+        </button>
       </div>
     </section>
 
-    <!-- LOGIN SCREEN -->
-    <section id="loginScreen" class="screen">
+    <!-- LOGIN -->
+    <section id="loginSection" hidden>
       <form id="loginForm">
         <h2>Log In</h2>
 
         <label>Email</label>
-        <input type="email" id="loginEmail" required>
+        <input id="loginEmail" type="email" required>
 
         <label>Password</label>
-        <input type="password" id="loginPassword" required>
+        <input id="loginPassword" type="password" required>
 
-        <button type="submit" class="submit-btn">Log In</button>
+        <div id="loginError" class="form-error hidden"></div>
+
+        <button type="submit" class="submit-btn">
+          Log In
+        </button>
+
         <span id="backFromLogin" class="back-link">← Back</span>
       </form>
     </section>
 
-    <!-- REGISTER SCREEN -->
-    <section id="registerScreen" class="screen">
+    <!-- REGISTER -->
+    <section id="registerSection" hidden>
       <form id="registerForm">
         <h2>Create Account</h2>
 
         <label>Full Name</label>
-        <input type="text" id="fullName" required>
+        <input id="fullName" required>
 
         <label>Email</label>
-        <input type="email" id="regEmail" required>
+        <input id="regEmail" type="email" required>
 
         <label>Password</label>
-        <input type="password" id="regPassword" required>
+        <input id="regPassword" type="password" required>
 
-        <label>Birthday</label>
-        <input type="date" id="birthday" required>
+        <button type="submit" class="submit-btn">
+          Create Account
+        </button>
 
-        <label>Address</label>
-        <input type="text" id="address" required>
-
-        <label>Contact Number</label>
-        <input type="tel" id="contactNumber">
-
-        <button type="submit" class="submit-btn">Create Account</button>
         <span id="backFromRegister" class="back-link">← Back</span>
       </form>
     </section>
 
   </div>
 
-  <!-- Firebase v8 -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-  <!-- App logic -->
+  <!-- App Logic -->
   <script src="app.js"></script>
+
+  <!-- Small page-only UI toggles -->
+  <script>
+    const welcome = document.getElementById("welcomeSection");
+    const login = document.getElementById("loginSection");
+    const register = document.getElementById("registerSection");
+
+    document.getElementById("showLoginBtn").onclick = () => {
+      welcome.hidden = true;
+      login.hidden = false;
+    };
+
+    document.getElementById("showRegisterBtn").onclick = () => {
+      welcome.hidden = true;
+      register.hidden = false;
+    };
+
+    document.getElementById("backFromLogin").onclick = () => {
+      login.hidden = true;
+      welcome.hidden = false;
+    };
+
+    document.getElementById("backFromRegister").onclick = () => {
+      register.hidden = true;
+      welcome.hidden = false;
+    };
+  </script>
+
 </body>
 </html>
