@@ -18,47 +18,37 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 /* =========================
-   UI STATE (WELCOME / LOGIN / REGISTER)
+   SCREEN STATE MANAGEMENT
    ========================= */
 
 document.addEventListener("DOMContentLoaded", () => {
-  const welcome = document.getElementById("welcomeScreen");
-  const loginForm = document.getElementById("loginForm");
-  const registerForm = document.getElementById("registerForm");
 
-  const showLoginBtn = document.getElementById("showLoginBtn");
-  const showRegisterBtn = document.getElementById("showRegisterBtn");
-  const backFromLogin = document.getElementById("backFromLogin");
+  // Screens
+  const welcomeScreen  = document.getElementById("welcomeScreen");
+  const loginScreen    = document.getElementById("loginScreen");
+  const registerScreen = document.getElementById("registerScreen");
+
+  // Buttons / Links
+  const showLoginBtn     = document.getElementById("showLoginBtn");
+  const showRegisterBtn  = document.getElementById("showRegisterBtn");
+  const backFromLogin    = document.getElementById("backFromLogin");
   const backFromRegister = document.getElementById("backFromRegister");
 
-  // Initial state
-  if (loginForm) loginForm.style.display = "none";
-  if (registerForm) registerForm.style.display = "none";
-
-  if (showLoginBtn) {
-    showLoginBtn.addEventListener("click", () => {
-      welcome.style.display = "none";
-      loginForm.style.display = "block";
-      registerForm.style.display = "none";
+  function showScreen(target) {
+    [welcomeScreen, loginScreen, registerScreen].forEach(screen => {
+      screen?.classList.remove("active");
     });
+    target?.classList.add("active");
   }
 
-  if (showRegisterBtn) {
-    showRegisterBtn.addEventListener("click", () => {
-      welcome.style.display = "none";
-      registerForm.style.display = "block";
-      loginForm.style.display = "none";
-    });
-  }
+  // Initial screen
+  showScreen(welcomeScreen);
 
-  if (backFromLogin) backFromLogin.addEventListener("click", showWelcome);
-  if (backFromRegister) backFromRegister.addEventListener("click", showWelcome);
-
-  function showWelcome() {
-    welcome.style.display = "block";
-    loginForm.style.display = "none";
-    registerForm.style.display = "none";
-  }
+  // Navigation
+  showLoginBtn?.addEventListener("click", () => showScreen(loginScreen));
+  showRegisterBtn?.addEventListener("click", () => showScreen(registerScreen));
+  backFromLogin?.addEventListener("click", () => showScreen(welcomeScreen));
+  backFromRegister?.addEventListener("click", () => showScreen(welcomeScreen));
 });
 
 /* =========================
@@ -71,19 +61,12 @@ if (registerForm) {
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    const fullNameInput = document.getElementById("fullName");
-    const regEmailInput = document.getElementById("regEmail");
-    const regPasswordInput = document.getElementById("regPassword");
-    const birthdayInput = document.getElementById("birthday");
-    const addressInput = document.getElementById("address");
-    const contactNumberInput = document.getElementById("contactNumber");
-
-    const fullName = fullNameInput.value.trim();
-    const email = regEmailInput.value.trim();
-    const password = regPasswordInput.value;
-    const birthday = birthdayInput.value;
-    const address = addressInput.value.trim();
-    const contactNumber = contactNumberInput.value.trim();
+    const fullName = fullName.value.trim();
+    const email = regEmail.value.trim();
+    const password = regPassword.value;
+    const birthday = birthday.value;
+    const address = address.value.trim();
+    const contactNumber = contactNumber.value.trim();
 
     try {
       const cred = await auth.createUserWithEmailAndPassword(email, password);
@@ -99,19 +82,14 @@ if (registerForm) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-    // Fallback UI reset (in case redirect is delayed)
-    document.getElementById("registerForm").style.display = "none";
-    document.getElementById("welcomeScreen").style.display = "block";
-
-    // Hard redirect
-    window.location.assign("dashboard.html");
+      // App-style navigation still ends with a hard route (for now)
+      window.location.href = "dashboard.html";
 
     } catch (err) {
       alert(err.message);
     }
   });
 }
-
 
 /* =========================
    LOGIN
@@ -129,15 +107,14 @@ if (loginForm) {
         loginPassword.value
       );
 
-        const user = auth.currentUser;
-        const doc = await db.collection("users").doc(user.uid).get();
+      const user = auth.currentUser;
+      const doc = await db.collection("users").doc(user.uid).get();
 
-        if (doc.exists && doc.data().role === "admin") {
+      if (doc.exists && doc.data().role === "admin") {
         window.location.href = "admin.html";
-        } else {
+      } else {
         window.location.href = "dashboard.html";
-        }
-
+      }
 
     } catch (err) {
       alert(err.message);
@@ -146,14 +123,12 @@ if (loginForm) {
 }
 
 /* =========================
-   AUTH PROTECTION (NO AUTO-REDIRECT)
+   AUTH PROTECTION
    ========================= */
-
 
 auth.onAuthStateChanged(async (user) => {
   const path = window.location.pathname;
 
-  // Not logged in → block protected pages
   if (!user) {
     if (path.includes("dashboard.html") || path.includes("admin.html")) {
       window.location.href = "index.html";
@@ -161,17 +136,13 @@ auth.onAuthStateChanged(async (user) => {
     return;
   }
 
-  // Logged in → check role if on admin page
   if (path.includes("admin.html")) {
     const doc = await db.collection("users").doc(user.uid).get();
-
     if (!doc.exists || doc.data().role !== "admin") {
       window.location.href = "dashboard.html";
     }
   }
 });
-
-
 
 /* =========================
    LOGOUT
@@ -186,41 +157,28 @@ if (logoutBtn) {
   });
 }
 
-
 /* =========================
    DASHBOARD AVATAR INITIALS
    ========================= */
 
 auth.onAuthStateChanged(async (user) => {
-  // Run ONLY on dashboard
   if (!user || !window.location.pathname.includes("dashboard.html")) return;
 
   const avatarInitials = document.getElementById("avatarInitials");
   const welcomeName = document.getElementById("welcomeName");
-
   if (!avatarInitials || !welcomeName) return;
 
-  try {
-    const doc = await db.collection("users").doc(user.uid).get();
-    if (!doc.exists) return;
+  const doc = await db.collection("users").doc(user.uid).get();
+  if (!doc.exists) return;
 
-    const data = doc.data();
+  const data = doc.data();
 
-    // Welcome text
-    welcomeName.textContent = `Welcome, ${data.fullName}`;
+  welcomeName.textContent = `Welcome, ${data.fullName}`;
 
-    // Generate initials
-    const initials = data.fullName
-      .trim()
-      .split(/\s+/)
-      .map(word => word[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-
-    avatarInitials.textContent = initials || "?";
-
-  } catch (err) {
-    console.error("Avatar load error:", err);
-  }
+  avatarInitials.textContent = data.fullName
+    .split(/\s+/)
+    .map(w => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 });

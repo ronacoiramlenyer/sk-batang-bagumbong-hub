@@ -2,47 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard</title>
+  <title>SK Batang Bagumbong Hub – Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
 
-  <div class="app-container dashboard">
+  <div class="app-container">
 
-    <!-- Avatar -->
-    <div class="avatar">
-        <div id="avatarCircle" class="avatar-circle">
-            <span id="avatarInitials"></span>
+    <section id="dashboardScreen" class="screen active dashboard">
+
+      <!-- HEADER -->
+      <div class="dashboard-header">
+        <div class="avatar">
+          <div class="avatar-circle">
+            <span id="avatarInitials">?</span>
+          </div>
         </div>
-    </div>
-    <!-- Welcome -->
-    <h1 id="welcomeName">Welcome!</h1>
-    <p class="dashboard-subtext">
-      What would you like to do today?
-    </p>
 
+        <h1 id="welcomeName">Welcome!</h1>
+        <p class="dashboard-subtext">
+          Here’s what’s happening in the community
+        </p>
+      </div>
 
+      <!-- EVENTS -->
+      <div class="dashboard-section">
+        <h2 class="section-title">Upcoming Events</h2>
 
-    <!-- Action choices -->
-    <div class="dashboard-actions">
-      <button class="action-card">
-        Join an Event
+        <div class="event-list">
+          <div class="event-card">
+            <h3>Barangay Clean-Up Drive</h3>
+            <p class="event-meta">📅 Sept 10 · 📍 Covered Court</p>
+            <button class="action-card small">Join Event</button>
+          </div>
+
+          <div class="event-card">
+            <h3>Youth Leadership Seminar</h3>
+            <p class="event-meta">📅 Sept 15 · 📍 Barangay Hall</p>
+            <button class="action-card small">Join Event</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANNOUNCEMENTS -->
+      <div class="dashboard-section">
+        <h2 class="section-title">Announcements</h2>
+
+        <div class="announcement-list">
+          <div class="announcement-card">
+            <p class="announcement-text">
+              Barangay office will be closed on Sept 8 due to system maintenance.
+            </p>
+            <span class="announcement-date">Posted Sept 5</span>
+          </div>
+
+          <div class="announcement-card">
+            <p class="announcement-text">
+              Free medical check-up available for senior citizens this Saturday.
+            </p>
+            <span class="announcement-date">Posted Sept 3</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOGOUT -->
+      <button id="logoutBtn" class="submit-btn">
+        Logout
       </button>
 
-      <button class="action-card">
-        View My Joined Events
-      </button>
-
-      <button class="action-card">
-        Update My Profile
-      </button>
-    </div>
-
-    <button id="logoutBtn" class="submit-btn logout">
-      Logout
-    </button>
+    </section>
 
   </div>
 

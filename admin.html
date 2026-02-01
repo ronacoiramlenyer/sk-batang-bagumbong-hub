@@ -11,19 +11,21 @@
 
   <div class="app-container admin">
 
-    <!-- Header -->
-    <h1>Admin Dashboard</h1>
-    <p class="dashboard-subtext">
-      Manage events and view participation reports
-    </p>
+    <!-- HEADER -->
+    <div class="dashboard-header">
+      <h1>Admin</h1>
+      <p class="dashboard-subtext">
+        Create events and manage participation
+      </p>
+    </div>
 
-    <!-- CREATE EVENT -->
-    <section class="admin-section">
+    <!-- CREATE EVENT (PRIMARY ACTION) -->
+    <section class="admin-section create-event">
       <h2>Create New Event</h2>
 
       <form id="createEventForm" class="admin-form">
         <label>Event Title</label>
-        <input type="text" id="eventTitle" placeholder="e.g. Youth Leadership Summit">
+        <input type="text" id="eventTitle" placeholder="Youth Leadership Summit">
 
         <label>Description</label>
         <input type="text" id="eventDescription" placeholder="Short description">
@@ -43,30 +45,41 @@
       </form>
     </section>
 
-    <!-- EVENTS LIST -->
+    <!-- EVENTS -->
     <section class="admin-section">
-      <h2>Existing Events</h2>
+      <div class="section-header">
+        <h2>Events <span class="badge">3</span></h2>
+        <span class="view-all">View All</span>
+      </div>
 
-      <!-- Placeholder list -->
       <div class="event-list">
 
-        <div class="event-card">
-          <h3>Sample Event Title</h3>
-          <p class="event-meta">March 20, 2026 • 3:00 PM</p>
-          <p class="event-meta">Location: Barangay Hall</p>
+        <!-- EVENT CARD -->
+        <div class="event-card admin-card">
 
-          <div class="event-actions">
-            <button class="action-card small">
-              View Joiners
-            </button>
+          <div class="event-image">
+            <span class="event-date">
+              <strong>24</strong><br>SEP
+            </span>
+          </div>
 
-            <button class="action-card small secondary">
-              Generate Report
-            </button>
+          <div class="event-info">
+            <h3>Tech Jobs Fair 2026</h3>
+            <p class="event-location">📍 Barangay Hall</p>
+
+            <div class="admin-actions">
+              <button class="action-card small">
+                View Joiners
+              </button>
+
+              <button class="action-card small secondary">
+                Generate Report
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- More events will be injected here later -->
+        <!-- More event cards injected later -->
 
       </div>
     </section>
@@ -83,7 +96,6 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
-  <!-- App Logic -->
   <script src="app.js"></script>
 </body>
 </html>
