@@ -27,27 +27,12 @@
 
     <!-- EVENTS -->
     <div class="dashboard-section">
-      <h2 class="section-title">Upcoming Events</h2>
+          <h2 class="section-title">Upcoming Events</h2>
 
-      <div class="event-list">
+          <div id="userEventList" class="event-list">
+      <p class="dashboard-subtext">No upcoming events.</p>
+    </div>
 
-        <div class="event-card">
-          <h3>Barangay Clean-Up Drive</h3>
-          <p class="event-meta">📅 Sept 10 · 📍 Covered Court</p>
-          <button type="button" class="action-card small">
-            Join Event
-          </button>
-        </div>
-
-        <div class="event-card">
-          <h3>Youth Leadership Seminar</h3>
-          <p class="event-meta">📅 Sept 15 · 📍 Barangay Hall</p>
-          <button type="button" class="action-card small">
-            Join Event
-          </button>
-        </div>
-
-      </div>
     </div>
 
     <!-- ANNOUNCEMENTS -->
@@ -72,6 +57,14 @@
 
       </div>
     </div>
+
+    <!-- BACK TO ADMIN BUTTON, if in preview mode-->
+    <button id="backToAdminBtn"
+      type="button"
+      class="submit-btn"
+      style="display:none; margin-bottom:12px;">
+      ← Back to Admin Panel
+    </button>
 
     <!-- LOGOUT -->
     <button id="logoutBtn" type="button" class="submit-btn">

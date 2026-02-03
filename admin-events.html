@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Events</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<!-- STATUS CHANGE MODAL -->
+<div id="statusModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Change Event Status</h3>
+    <p id="currentStatusText"></p>
+
+    <div class="status-options">
+      <button class="status-option" data-status="upcoming">Upcoming</button>
+      <button class="status-option" data-status="ongoing">Ongoing</button>
+      <button class="status-option" data-status="completed">Completed</button>
+      <button class="status-option danger" data-status="archived">Archived</button>
+    </div>
+
+    <button id="closeStatusModal" class="back-link">Cancel</button>
+  </div>
+</div>
+
+<!-- EDIT EVENT MODAL -->
+<div id="editEventModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Edit Event</h3>
+
+    <form id="editEventForm">
+
+      <label>Event Title</label>
+      <input type="text" id="editTitle" required>
+
+      <label>Description</label>
+      <textarea id="editDescription" rows="4"></textarea>
+
+      <label>Date</label>
+      <input type="date" id="editDate" required>
+
+      <label>Time</label>
+      <input type="time" id="editTime" required>
+
+      <label>Location</label>
+      <input type="text" id="editLocation" required>
+
+      <button type="submit" class="submit-btn">
+        Save Changes
+      </button>
+
+      <span id="closeEditModal" class="back-link">Cancel</span>
+    </form>
+  </div>
+</div>
+
+
+<!-- ARCHIVE EVENT MODAL -->
+<div id="archiveEventModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Archive Event</h3>
+    <p>
+      This event will be hidden from users.<br>
+      You can still view it in the admin panel.
+    </p>
+
+    <button id="confirmArchiveBtn" class="submit-btn">
+      Archive Event
+    </button>
+
+    <span id="cancelArchiveBtn" class="back-link">
+      Cancel
+    </span>
+  </div>
+</div>
+
+
+
+<body>
+
+  <div class="app-container admin-events">
+
+    <!-- HEADER -->
+    <div class="dashboard-header">
+      <h1>Manage Events</h1>
+      <p class="dashboard-subtext">
+        Create and manage community events
+      </p>
+    </div>
+
+    <!-- CREATE EVENT -->
+    <section class="admin-section create-event">
+      <h2>Create New Event</h2>
+
+      <form id="createEventForm" class="admin-form">
+
+        <label>Event Title</label>
+        <input type="text" id="eventTitle" placeholder="Youth Leadership Summit" required>
+
+        <label>Description</label>
+        <textarea id="eventDescription"
+        placeholder="Describe the event details, objectives, and important notes"
+        rows="4"></textarea>
+
+        <label>Date</label>
+        <input type="date" id="eventDate" required>
+
+        <label>Time</label>
+        <input type="time" id="eventTime" required>
+
+        <label>Location</label>
+        <input type="text" id="eventLocation" placeholder="Barangay Hall / Covered Court" required>
+
+        <button type="submit" class="submit-btn">
+          Create Event
+        </button>
+
+      </form>
+    </section>
+
+    <!-- EVENTS LIST -->
+    <section class="admin-section">
+
+      <div class="section-header">
+        <h2>Existing Events</h2>
+      </div>
+
+      <div id="adminEventList" class="event-list">
+        <!-- Events will be rendered here -->
+        <p class="dashboard-subtext">No events yet.</p>
+      </div>
+
+    </section>
+
+    <!-- NAVIGATION -->
+    <div class="admin-nav">
+      <button type="button" class="action-card secondary"
+        onclick="window.location.href='admin.html'">
+        ← Back to Admin Panel
+      </button>
+    </div>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>
