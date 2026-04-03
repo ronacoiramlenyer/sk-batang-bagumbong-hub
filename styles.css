@@ -149,6 +149,16 @@ button:active {
   transform: scale(0.97);
 }
 
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.form-actions .submit-btn {
+  flex: 1;
+}
+
 /* =========================
    BACK LINKS
    ========================= */
@@ -548,6 +558,16 @@ button:active {
   transform: scale(0.97);
 }
 
+.submit-btn.secondary {
+  background: var(--orange-primary);
+  color: var(--light);
+}
+
+.submit-btn.secondary:hover {
+  background: var(--orange-light);
+}
+
+
 /* =========================
    BACK LINKS
    ========================= */
@@ -920,6 +940,73 @@ textarea {
   color: white;
 }
 
+
+/* =========================
+   COMPACT EVENT CARD
+   ========================= */
+
+.event-card.compact {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--gray);
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.event-title {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* Compact meta */
+.event-meta {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+/* =========================
+   COMPACT ACTION ICONS
+   ========================= */
+
+.event-actions.compact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.icon-btn {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 10px;
+  font-size: 14px;
+  text-align: center;
+  background: var(--light);
+  border: 2px solid transparent;
+}
+
+/* Icon color coding */
+.icon-btn.status {
+  border-color: var(--green-primary);
+}
+
+.icon-btn.edit {
+  border-color: var(--orange-primary);
+}
+
+.icon-btn.archive {
+  border-color: #999;
+}
+
+.icon-btn:hover {
+  background: var(--dark);
+  color: var(--light);
+}
 
 
 

@@ -1,0 +1,10 @@
+git remote add origin https://github.com/ronacoiramlenyer/sk-batang-bagumbong-hub.git
+
+git config --global user.name "ronacoiramlenyer"
+git config --global user.email "r.canor.lasalle@email.com"  # Use your actual email
+
+
+https://YOUR_USERNAME.github.io/YOUR_REPO_NAME/
+
+
+https://github.com/ronacoiramlenyer.github.io/sk-batang-bagumbong-hub
