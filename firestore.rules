@@ -27,11 +27,23 @@ service cloud.firestore {
       // A user can read/write only their own profile.
       // Admins can read any profile (needed for admin views).
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId);
-      // Prevent users from changing their own role (privilege escalation).
+
+      // Signup: must be creating their own doc, must start as a regular
+      // user with a pending ID review — prevents self-assigning admin
+      // or a pre-approved ID status at account creation.
+      allow create: if isOwner(userId) &&
+        request.resource.data.role == 'user' &&
+        request.resource.data.idStatus == 'pending';
+
+      // Owner can update their own profile (e.g. completing missing
+      // fields), but can't change their own role, idStatus, or idNumber —
+      // those are admin-only, via the isAdmin() branch below.
       allow update: if isOwner(userId) &&
-        request.resource.data.role == resource.data.role;
-      // Admins can update any user doc, including role assignment.
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.get('idStatus', null) == resource.data.get('idStatus', null) &&
+        request.resource.data.get('idNumber', null) == resource.data.get('idNumber', null);
+
+      // Admins can update any user doc, including role and ID approval.
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -77,41 +89,16 @@ service cloud.firestore {
     }
 
     // ---------------------------
-    // settings/{docId}  (e.g. certificateTemplate)
+    // settings/{docId}  (e.g. certificateTemplate, idTemplate, idCounter)
     // ---------------------------
     match /settings/{docId} {
-      // Any signed-in user can read (needed to generate their own certificate).
+      // Any signed-in user can read (needed to generate their own certificate/ID).
       allow read: if isSignedIn();
-      // Only admins can update settings like the certificate template.
+      // Only admins can update settings like templates or the ID counter.
       allow write: if isAdmin();
     }
 
-    // ---------------------------
-    // idApplications/{userId}   (doc ID == the applicant's uid)
-    // ---------------------------
-    match /idApplications/{userId} {
-      // Owner reads their own; admin reads all (needed for the approval queue).
-      allow read: if isOwner(userId) || isAdmin();
-
-      // First submission — must be the owner's own doc, status starts pending.
-      allow create: if isOwner(userId) &&
-        request.resource.data.userId == userId &&
-        request.resource.data.status == 'pending';
-
-      // Owner can edit/resubmit only while still pending, and can't set
-      // their own status. Admin can update anytime (approve/reject/etc).
-      allow update: if isAdmin() ||
-        (isOwner(userId) &&
-         resource.data.status == 'pending' &&
-         request.resource.data.status == 'pending' &&
-         request.resource.data.userId == userId);
-
-      allow delete: if isAdmin();
-    }
-
-    // Default deny for anything not explicitly matched above
-    // (certificates, conversations, etc.
-    // will need their own rules blocks as those features are built).
+    // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;
     }

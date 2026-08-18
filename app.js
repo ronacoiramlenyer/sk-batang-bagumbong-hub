@@ -52,9 +52,39 @@ loginForm?.addEventListener("submit", async (e) => {
    ========================= */
 
 const registerForm = document.getElementById("registerForm");
+const registerError = document.getElementById("registerError");
+const registerSubmitBtn = document.getElementById("registerSubmitBtn");
+const regPhotoFileInput = document.getElementById("regPhotoFile");
+const regPhotoPreview = document.getElementById("regPhotoPreview");
+
+let regPhotoDataUrl = null;
+
+regPhotoFileInput?.addEventListener("change", async () => {
+  const file = regPhotoFileInput.files[0];
+  if (!file) return;
+
+  try {
+    regPhotoDataUrl = await compressImageToDataUrl(file);
+    regPhotoPreview.src = regPhotoDataUrl;
+    regPhotoPreview.classList.remove("hidden");
+  } catch (err) {
+    console.error("Photo processing failed:", err);
+    alert("Couldn't process that photo. Try a different image.");
+  }
+});
 
 registerForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  registerError?.classList.add("hidden");
+
+  if (!regPhotoDataUrl) {
+    registerError.textContent = "Please upload a photo.";
+    registerError.classList.remove("hidden");
+    return;
+  }
+
+  registerSubmitBtn.disabled = true;
+  registerSubmitBtn.textContent = "Creating Account…";
 
   try {
     const cred = await auth.createUserWithEmailAndPassword(
@@ -65,14 +95,24 @@ registerForm?.addEventListener("submit", async (e) => {
     await db.collection("users").doc(cred.user.uid).set({
       fullName: fullName.value.trim(),
       email: regEmail.value.trim(),
+      address: regAddress.value.trim(),
+      birthdate: regBirthdate.value,
+      contactNumber: regContactNumber.value.trim(),
+      photoData: regPhotoDataUrl,
       role: "user",
+      idStatus: "pending",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
     window.location.href = "dashboard.html";
 
   } catch (err) {
-    alert(err.message);
+    console.error("Registration failed:", err);
+    registerError.textContent = err.message;
+    registerError.classList.remove("hidden");
+  } finally {
+    registerSubmitBtn.disabled = false;
+    registerSubmitBtn.textContent = "Create Account";
   }
 });
 
@@ -99,8 +139,17 @@ const ADMIN_ONLY_PAGES = [
 const AUTH_REQUIRED_PAGES = [
   ...ADMIN_ONLY_PAGES,
   "dashboard.html",
-  "apply-id.html"
+  "complete-profile.html"
 ];
+
+function isProfileComplete(userData) {
+  return !!(
+    userData.address &&
+    userData.birthdate &&
+    userData.contactNumber &&
+    userData.photoData
+  );
+}
 
 auth.onAuthStateChanged(async (user) => {
 
@@ -118,11 +167,29 @@ auth.onAuthStateChanged(async (user) => {
     return;
   }
 
-  const role = doc.data().role;
+  const userData = doc.data();
+  const role = userData.role;
 
   // 🚫 Block non-admins from any admin page
   if (ADMIN_ONLY_PAGES.includes(pageName) && role !== "admin") {
     window.location.href = "dashboard.html";
+    return;
+  }
+
+  // 🚫 Incomplete profile — required for ID-relevant pages, not for
+  // complete-profile.html itself (or the site would redirect in a loop).
+  const needsCompleteProfile = AUTH_REQUIRED_PAGES.includes(pageName) &&
+    pageName !== "complete-profile.html" &&
+    !isProfileComplete(userData);
+
+  if (needsCompleteProfile) {
+    window.location.href = "complete-profile.html";
+    return;
+  }
+
+  // Already complete — no reason to be stuck on the completion page
+  if (pageName === "complete-profile.html" && isProfileComplete(userData)) {
+    window.location.href = role === "admin" ? "admin.html" : "dashboard.html";
     return;
   }
 
@@ -132,14 +199,99 @@ auth.onAuthStateChanged(async (user) => {
     const avatarInitials = document.getElementById("avatarInitials");
 
     if (welcomeName && avatarInitials) {
-      welcomeName.textContent = `Welcome, ${doc.data().fullName}`;
-      avatarInitials.textContent = doc.data().fullName
+      welcomeName.textContent = `Welcome, ${userData.fullName}`;
+      avatarInitials.textContent = userData.fullName
         .split(/\s+/)
         .map(w => w[0])
         .slice(0, 2)
         .join("")
         .toUpperCase();
     }
+  }
+});
+
+/* =========================
+   COMPLETE PROFILE (complete-profile.html)
+   ========================= */
+
+const completeProfileForm = document.getElementById("completeProfileForm");
+const completeProfileError = document.getElementById("completeProfileError");
+const completeProfileSubmitBtn = document.getElementById("completeProfileSubmitBtn");
+const cpPhotoFileInput = document.getElementById("cpPhotoFile");
+const cpPhotoPreview = document.getElementById("cpPhotoPreview");
+
+let cpPhotoDataUrl = null;
+
+cpPhotoFileInput?.addEventListener("change", async () => {
+  const file = cpPhotoFileInput.files[0];
+  if (!file) return;
+
+  try {
+    cpPhotoDataUrl = await compressImageToDataUrl(file);
+    cpPhotoPreview.src = cpPhotoDataUrl;
+    cpPhotoPreview.classList.remove("hidden");
+  } catch (err) {
+    console.error("Photo processing failed:", err);
+    alert("Couldn't process that photo. Try a different image.");
+  }
+});
+
+// Prefill with whatever's already on file (in case only some fields are missing)
+if (completeProfileForm) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      if (!doc.exists) return;
+
+      const data = doc.data();
+      if (data.address) cpAddress.value = data.address;
+      if (data.birthdate) cpBirthdate.value = data.birthdate;
+      if (data.contactNumber) cpContactNumber.value = data.contactNumber;
+      if (data.photoData) {
+        cpPhotoDataUrl = data.photoData;
+        cpPhotoPreview.src = data.photoData;
+        cpPhotoPreview.classList.remove("hidden");
+      }
+    } catch (err) {
+      console.error("Failed to prefill profile:", err);
+    }
+  });
+}
+
+completeProfileForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  completeProfileError?.classList.add("hidden");
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  if (!cpPhotoDataUrl) {
+    completeProfileError.textContent = "Please upload a photo.";
+    completeProfileError.classList.remove("hidden");
+    return;
+  }
+
+  completeProfileSubmitBtn.disabled = true;
+  completeProfileSubmitBtn.textContent = "Saving…";
+
+  try {
+    await db.collection("users").doc(user.uid).update({
+      address: cpAddress.value.trim(),
+      birthdate: cpBirthdate.value,
+      contactNumber: cpContactNumber.value.trim(),
+      photoData: cpPhotoDataUrl
+    });
+
+    window.location.href = "dashboard.html";
+  } catch (err) {
+    console.error("Failed to save profile:", err);
+    completeProfileError.textContent = "Something went wrong. Please try again.";
+    completeProfileError.classList.remove("hidden");
+  } finally {
+    completeProfileSubmitBtn.disabled = false;
+    completeProfileSubmitBtn.textContent = "Save and Continue";
   }
 });
 
@@ -451,14 +603,15 @@ const ID_TEXT_CONFIG = {
   name:      { xPct: 0.5, yPct: 0.62, fontPct: 0.032, weight: "bold",   color: "#1c1c1c" },
   address:   { xPct: 0.5, yPct: 0.70, fontPct: 0.020, weight: "normal", color: "#333333" },
   birthdate: { xPct: 0.5, yPct: 0.76, fontPct: 0.018, weight: "normal", color: "#333333" },
-  contact:   { xPct: 0.5, yPct: 0.82, fontPct: 0.018, weight: "normal", color: "#333333" }
+  contact:   { xPct: 0.5, yPct: 0.82, fontPct: 0.018, weight: "normal", color: "#333333" },
+  idNumber:  { xPct: 0.5, yPct: 0.90, fontPct: 0.020, weight: "bold",   color: "#1c1c1c" }
 };
 
 // Photo placement, also as a fraction of the template's dimensions
 // (box position + size, not just a point).
 const ID_PHOTO_CONFIG = { xPct: 0.5, yPct: 0.30, widthPct: 0.30, heightPct: 0.30 };
 
-async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate, contactNumber }) {
+async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate, contactNumber, idNumber }) {
   const doc = await ID_TEMPLATE_DOC.get();
   if (!doc.exists || !doc.data().imageData) {
     throw new Error("No ID template has been uploaded yet.");
@@ -509,6 +662,7 @@ async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate
   drawLine(address, ID_TEXT_CONFIG.address);
   drawLine(birthdate, ID_TEXT_CONFIG.birthdate);
   drawLine(contactNumber, ID_TEXT_CONFIG.contact);
+  drawLine(idNumber, ID_TEXT_CONFIG.idNumber);
 
   return canvas;
 }
@@ -1322,7 +1476,7 @@ generateAllCertificatesBtn?.addEventListener("click", async () => {
 
 
 /* =========================
-   ADMIN – SK ID APPLICATIONS
+   ADMIN – SK ID APPROVALS
    ========================= */
 
 const idApplicationsList = document.getElementById("idApplicationsList");
@@ -1334,21 +1488,28 @@ function idStatusBadgeClass(status) {
 }
 
 if (idApplicationsList) {
-  db.collection("idApplications")
-    .orderBy("submittedAt", "desc")
+  // Regular users only — admins don't go through ID approval themselves.
+  db.collection("users")
+    .where("role", "==", "user")
     .onSnapshot((snapshot) => {
 
       idApplicationsList.innerHTML = "";
 
-      if (snapshot.empty) {
+      // Only show users who've completed their profile (have ID-relevant data)
+      const applicants = snapshot.docs.filter((doc) => {
+        const u = doc.data();
+        return u.address && u.birthdate && u.contactNumber && u.photoData;
+      });
+
+      if (applicants.length === 0) {
         idApplicationsList.innerHTML =
-          '<p class="dashboard-subtext">No applications yet.</p>';
+          '<p class="dashboard-subtext">No completed applicant profiles yet.</p>';
         return;
       }
 
-      snapshot.forEach((doc) => {
+      applicants.forEach((doc) => {
         const app = doc.data();
-        const status = app.status || "pending";
+        const status = app.idStatus || "pending";
 
         const card = document.createElement("div");
         card.className = "event-card admin-card";
@@ -1360,6 +1521,7 @@ if (idApplicationsList) {
               <h3>${app.fullName || "Unknown"}</h3>
               <p class="event-meta">${app.address || ""}</p>
               <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
+              ${app.idNumber ? `<p class="event-meta"><strong>${app.idNumber}</strong></p>` : ""}
               <span class="status-badge ${idStatusBadgeClass(status)}">${status.toUpperCase()}</span>
             </div>
           </div>
@@ -1394,10 +1556,37 @@ if (idApplicationsList) {
         idApplicationsList.appendChild(card);
       });
     }, (err) => {
-      console.error("Failed to load ID applications:", err);
+      console.error("Failed to load ID applicants:", err);
       idApplicationsList.innerHTML =
-        '<p class="dashboard-subtext">Failed to load applications.</p>';
+        '<p class="dashboard-subtext">Failed to load applicants.</p>';
     });
+}
+
+// Assigns the next serial ID number (e.g. SK-2026-0007) using a
+// transaction against a shared counter doc, so concurrent approvals
+// can't collide on the same number. Targets the user's own profile doc.
+async function assignIdNumber(userId) {
+  const counterRef = db.collection("settings").doc("idCounter");
+  const userRef = db.collection("users").doc(userId);
+  const admin = auth.currentUser;
+
+  return db.runTransaction(async (tx) => {
+    const counterDoc = await tx.get(counterRef);
+    const lastNumber = counterDoc.exists ? (counterDoc.data().lastNumber || 0) : 0;
+    const nextNumber = lastNumber + 1;
+    const year = new Date().getFullYear();
+    const idNumber = `SK-${year}-${String(nextNumber).padStart(4, "0")}`;
+
+    tx.set(counterRef, { lastNumber: nextNumber }, { merge: true });
+    tx.update(userRef, {
+      idNumber,
+      idStatus: "approved",
+      idReviewedBy: admin.uid,
+      idReviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    return idNumber;
+  });
 }
 
 // Approve / Reject
@@ -1405,36 +1594,40 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-role="approve-id"], [data-role="reject-id"]');
   if (!btn || btn.disabled) return;
 
-  const applicationId = btn.dataset.id;
-  const newStatus = btn.dataset.role === "approve-id" ? "approved" : "rejected";
+  const userId = btn.dataset.id;
+  const isApprove = btn.dataset.role === "approve-id";
 
-  if (newStatus === "rejected" && !confirm("Reject this application?")) return;
+  if (!isApprove && !confirm("Reject this applicant?")) return;
 
   try {
-    const admin = auth.currentUser;
-    await db.collection("idApplications").doc(applicationId).update({
-      status: newStatus,
-      reviewedBy: admin.uid,
-      reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    if (isApprove) {
+      await assignIdNumber(userId);
+    } else {
+      const admin = auth.currentUser;
+      await db.collection("users").doc(userId).update({
+        idStatus: "rejected",
+        idReviewedBy: admin.uid,
+        idReviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
   } catch (err) {
-    console.error("Failed to update application status:", err);
+    console.error("Failed to update applicant status:", err);
     alert("Failed to update status.");
   }
 });
 
-// Generate ID card for an approved application
+// Generate ID card for an approved applicant
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-role="generate-id"]');
   if (!btn || btn.disabled) return;
 
-  const applicationId = btn.dataset.id;
+  const userId = btn.dataset.id;
   const originalLabel = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = "Generating…";
 
   try {
-    const doc = await db.collection("idApplications").doc(applicationId).get();
+    const doc = await db.collection("users").doc(userId).get();
     if (!doc.exists) return;
     const app = doc.data();
 
@@ -1443,9 +1636,10 @@ document.addEventListener("click", async (e) => {
       fullName: app.fullName,
       address: app.address,
       birthdate: app.birthdate,
-      contactNumber: app.contactNumber
+      contactNumber: app.contactNumber,
+      idNumber: app.idNumber
     });
-    downloadCanvasAsPng(canvas, `SK-ID-${safeFilenamePart(app.fullName)}.png`);
+    downloadCanvasAsPng(canvas, `SK-ID-${app.idNumber || safeFilenamePart(app.fullName)}.png`);
   } catch (err) {
     console.error("ID generation failed:", err);
     alert("Couldn't generate the ID. Has the ID template been uploaded yet? (Admin Panel → SK ID → ID Template)");
@@ -1564,139 +1758,6 @@ document.addEventListener("click", async (e) => {
 
 
 /* =========================
-   USER – SK ID APPLICATION FORM (apply-id.html)
-   ========================= */
-
-const idApplicationForm = document.getElementById("idApplicationForm");
-const applyStatusBanner = document.getElementById("applyStatusBanner");
-const applyError = document.getElementById("applyError");
-const idApplicationSubmitBtn = document.getElementById("idApplicationSubmitBtn");
-const idFullNameInput = document.getElementById("idFullName");
-const idAddressInput = document.getElementById("idAddress");
-const idBirthdateInput = document.getElementById("idBirthdate");
-const idContactNumberInput = document.getElementById("idContactNumber");
-const idPhotoFileInput = document.getElementById("idPhotoFile");
-const idPhotoPreview = document.getElementById("idPhotoPreview");
-
-let pendingPhotoDataUrl = null;  // newly-selected, compressed photo staged for submit
-let existingPhotoDataUrl = null; // photo already on file, kept if not replaced
-
-function showApplyBanner(text, type) {
-  if (!applyStatusBanner) return;
-  applyStatusBanner.textContent = text;
-  applyStatusBanner.className = `status-banner status-banner-${type}`;
-  applyStatusBanner.classList.remove("hidden");
-}
-
-idPhotoFileInput?.addEventListener("change", async () => {
-  const file = idPhotoFileInput.files[0];
-  if (!file) return;
-
-  try {
-    pendingPhotoDataUrl = await compressImageToDataUrl(file);
-    idPhotoPreview.src = pendingPhotoDataUrl;
-    idPhotoPreview.classList.remove("hidden");
-  } catch (err) {
-    console.error("Photo processing failed:", err);
-    alert("Couldn't process that photo. Try a different image.");
-  }
-});
-
-if (idApplicationForm) {
-  waitForUser().then(async (user) => {
-    if (!user) return;
-
-    try {
-      const userDoc = await db.collection("users").doc(user.uid).get();
-      if (userDoc.exists && !idFullNameInput.value) {
-        idFullNameInput.value = userDoc.data().fullName || "";
-      }
-    } catch (err) {
-      console.error("Failed to prefill name:", err);
-    }
-
-    try {
-      const appDoc = await db.collection("idApplications").doc(user.uid).get();
-      if (!appDoc.exists) return;
-
-      const data = appDoc.data();
-
-      idFullNameInput.value = data.fullName || "";
-      idAddressInput.value = data.address || "";
-      idBirthdateInput.value = data.birthdate || "";
-      idContactNumberInput.value = data.contactNumber || "";
-      existingPhotoDataUrl = data.photoData || null;
-
-      if (existingPhotoDataUrl) {
-        idPhotoPreview.src = existingPhotoDataUrl;
-        idPhotoPreview.classList.remove("hidden");
-      }
-
-      if (data.status === "pending") {
-        showApplyBanner("Your application is pending review. You can still edit and resubmit.", "pending");
-      } else if (data.status === "approved") {
-        showApplyBanner("Your application has already been approved.", "approved");
-        idApplicationForm.classList.add("hidden");
-      } else if (data.status === "rejected") {
-        showApplyBanner("Your application was not approved. Contact the SK office for details.", "rejected");
-        idApplicationForm.classList.add("hidden");
-      }
-    } catch (err) {
-      console.error("Failed to load existing application:", err);
-    }
-  });
-}
-
-idApplicationForm?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  applyError?.classList.add("hidden");
-
-  const user = auth.currentUser;
-  if (!user) return;
-
-  const photoData = pendingPhotoDataUrl || existingPhotoDataUrl;
-
-  if (!photoData) {
-    applyError.textContent = "Please upload a photo.";
-    applyError.classList.remove("hidden");
-    return;
-  }
-
-  idApplicationSubmitBtn.disabled = true;
-  idApplicationSubmitBtn.textContent = "Submitting…";
-
-  try {
-    const appRef = db.collection("idApplications").doc(user.uid);
-    const existingSnap = await appRef.get();
-
-    await appRef.set({
-      userId: user.uid,
-      fullName: idFullNameInput.value.trim(),
-      address: idAddressInput.value.trim(),
-      birthdate: idBirthdateInput.value,
-      contactNumber: idContactNumberInput.value.trim(),
-      photoData,
-      status: "pending",
-      submittedAt: existingSnap.exists
-        ? existingSnap.data().submittedAt
-        : firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    alert("Application submitted. You'll be notified once it's reviewed.");
-    window.location.href = "dashboard.html";
-  } catch (err) {
-    console.error("Application submission failed:", err);
-    applyError.textContent = "Something went wrong. Please try again.";
-    applyError.classList.remove("hidden");
-  } finally {
-    idApplicationSubmitBtn.disabled = false;
-    idApplicationSubmitBtn.textContent = "Submit Application";
-  }
-});
-
-
-/* =========================
    USER DASHBOARD – SK ID STATUS
    ========================= */
 
@@ -1708,50 +1769,37 @@ if (idApplicationStatusEl) {
     if (!user) return;
 
     try {
-      const appDoc = await db.collection("idApplications").doc(user.uid).get();
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      if (!userDoc.exists) return;
 
-      if (!appDoc.exists) {
-        idApplicationStatusEl.innerHTML = `
-          <div class="event-card">
-            <p class="event-meta">You haven't applied for an SK Barangay ID yet.</p>
-            <button type="button" class="action-card small"
-              onclick="window.location.href='apply-id.html'">
-              Apply Now
-            </button>
-          </div>
-        `;
-        return;
-      }
-
-      const data = appDoc.data();
+      const data = userDoc.data();
+      const status = data.idStatus || "pending"; // profile-complete users default to pending
       myIdApplicationData = data;
 
-      const badgeClass = data.status === "approved" ? "status-upcoming"
-        : data.status === "rejected" ? "status-archived"
+      const badgeClass = status === "approved" ? "status-upcoming"
+        : status === "rejected" ? "status-archived"
         : "status-ongoing";
 
       let actionHtml = "";
-      if (data.status === "pending") {
-        actionHtml = `<button type="button" class="action-card small"
-          onclick="window.location.href='apply-id.html'">
-          View / Edit Application
-        </button>`;
-      } else if (data.status === "approved") {
+      if (status === "approved") {
         actionHtml = `<button type="button" class="action-card small" data-role="download-id">
           Download My ID
         </button>`;
-      } else if (data.status === "rejected") {
+      } else if (status === "rejected") {
         actionHtml = '<p class="dashboard-subtext">Contact the SK office for details.</p>';
+      } else {
+        actionHtml = '<p class="dashboard-subtext">Waiting for admin review.</p>';
       }
 
       idApplicationStatusEl.innerHTML = `
         <div class="event-card">
-          <span class="status-badge ${badgeClass}">${(data.status || "pending").toUpperCase()}</span>
+          <span class="status-badge ${badgeClass}">${status.toUpperCase()}</span>
+          ${data.idNumber ? `<p class="event-meta"><strong>${data.idNumber}</strong></p>` : ""}
           ${actionHtml}
         </div>
       `;
     } catch (err) {
-      console.error("Failed to load ID application status:", err);
+      console.error("Failed to load ID status:", err);
       idApplicationStatusEl.innerHTML =
         '<p class="dashboard-subtext">Couldn\'t load status.</p>';
     }
@@ -1773,9 +1821,10 @@ document.addEventListener("click", async (e) => {
       fullName: myIdApplicationData.fullName,
       address: myIdApplicationData.address,
       birthdate: myIdApplicationData.birthdate,
-      contactNumber: myIdApplicationData.contactNumber
+      contactNumber: myIdApplicationData.contactNumber,
+      idNumber: myIdApplicationData.idNumber
     });
-    downloadCanvasAsPng(canvas, `SK-ID-${safeFilenamePart(myIdApplicationData.fullName)}.png`);
+    downloadCanvasAsPng(canvas, `SK-ID-${myIdApplicationData.idNumber || safeFilenamePart(myIdApplicationData.fullName)}.png`);
   } catch (err) {
     console.error("ID generation failed:", err);
     alert("Couldn't generate your ID yet. The template may not be ready — please check back later.");

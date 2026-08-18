@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Complete Your Profile</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <section>
+      <h1>Complete Your Profile</h1>
+      <p class="tagline">
+        We need a few more details from you before you can continue —
+        this is also what's used for your SK Barangay ID.
+      </p>
+
+      <form id="completeProfileForm">
+
+        <label>Address</label>
+        <input id="cpAddress" required>
+
+        <label>Birthdate</label>
+        <input id="cpBirthdate" type="date" required>
+
+        <label>Contact Number</label>
+        <input id="cpContactNumber" type="tel" required>
+
+        <label>Photo (clear front-facing photo, used for your SK ID)</label>
+        <input id="cpPhotoFile" type="file" accept="image/png, image/jpeg">
+        <img id="cpPhotoPreview" class="template-preview hidden" alt="Photo preview">
+
+        <div id="completeProfileError" class="form-error hidden"></div>
+
+        <button type="submit" id="completeProfileSubmitBtn" class="submit-btn">
+          Save and Continue
+        </button>
+      </form>
+    </section>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

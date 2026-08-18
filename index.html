@@ -61,7 +61,22 @@
         <label>Password</label>
         <input id="regPassword" type="password" required>
 
-        <button type="submit" class="submit-btn">
+        <label>Address</label>
+        <input id="regAddress" required>
+
+        <label>Birthdate</label>
+        <input id="regBirthdate" type="date" required>
+
+        <label>Contact Number</label>
+        <input id="regContactNumber" type="tel" required>
+
+        <label>Photo (clear front-facing photo, used for your SK ID)</label>
+        <input id="regPhotoFile" type="file" accept="image/png, image/jpeg" required>
+        <img id="regPhotoPreview" class="template-preview hidden" alt="Photo preview">
+
+        <div id="registerError" class="form-error hidden"></div>
+
+        <button type="submit" id="registerSubmitBtn" class="submit-btn">
           Create Account
         </button>
 
