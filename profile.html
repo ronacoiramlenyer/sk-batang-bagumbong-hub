@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Profile – SK Batang Bagumbong Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container dashboard">
+
+    <!-- HEADER -->
+    <div class="dashboard-header">
+      <div class="avatar">
+        <div class="avatar-circle">
+          <span id="avatarInitials">?</span>
+        </div>
+      </div>
+
+      <h1 id="welcomeName">Welcome!</h1>
+      <p class="dashboard-subtext">
+        Your SK Barangay ID and certificates
+      </p>
+    </div>
+
+    <!-- SK BARANGAY ID -->
+    <div class="dashboard-section">
+      <h2 class="section-title">SK Barangay ID</h2>
+
+      <div id="idApplicationStatus" class="status-row">
+        <span class="dashboard-subtext">Loading…</span>
+      </div>
+    </div>
+
+    <!-- CERTIFICATES -->
+    <div class="dashboard-section">
+      <h2 class="section-title">My Certificates</h2>
+
+      <div id="myCertificatesList" class="event-list">
+        <p class="dashboard-subtext">No certificates yet.</p>
+      </div>
+    </div>
+
+    <span class="back-link" onclick="window.location.href='dashboard.html'">← Back to Dashboard</span>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" type="button" class="submit-btn" style="margin-top:18px;">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

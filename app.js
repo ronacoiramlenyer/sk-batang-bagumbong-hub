@@ -141,7 +141,8 @@ const AUTH_REQUIRED_PAGES = [
   ...ADMIN_ONLY_PAGES,
   "dashboard.html",
   "complete-profile.html",
-  "messages.html"
+  "messages.html",
+  "profile.html"
 ];
 
 function isProfileComplete(userData) {
@@ -195,20 +196,19 @@ auth.onAuthStateChanged(async (user) => {
     return;
   }
 
-  // Populate dashboard UI
-  if (path.includes("dashboard.html")) {
-    const welcomeName = document.getElementById("welcomeName");
-    const avatarInitials = document.getElementById("avatarInitials");
+  // Populate welcome name / avatar initials — element existence check
+  // means this works on any page that has them (dashboard, profile).
+  const welcomeName = document.getElementById("welcomeName");
+  const avatarInitials = document.getElementById("avatarInitials");
 
-    if (welcomeName && avatarInitials) {
-      welcomeName.textContent = `Welcome, ${userData.fullName}`;
-      avatarInitials.textContent = userData.fullName
-        .split(/\s+/)
-        .map(w => w[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase();
-    }
+  if (welcomeName && avatarInitials) {
+    welcomeName.textContent = `Welcome, ${userData.fullName}`;
+    avatarInitials.textContent = userData.fullName
+      .split(/\s+/)
+      .map(w => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
   }
 });
 
@@ -2111,6 +2111,11 @@ if (chatThread) {
 
 const messagesHeaderBtn = document.getElementById("messagesHeaderBtn");
 const messagesHeaderBadge = document.getElementById("messagesHeaderBadge");
+const avatarBtn = document.getElementById("avatarBtn");
+
+avatarBtn?.addEventListener("click", () => {
+  window.location.href = "profile.html";
+});
 
 if (messagesHeaderBtn) {
   messagesHeaderBtn.addEventListener("click", () => {

@@ -1657,3 +1657,11 @@ textarea {
 .status-row-left .quick-access-icon {
   font-size: 18px;
 }
+
+/* =========================
+   GENERIC CLICKABLE CURSOR
+   ========================= */
+
+.clickable {
+  cursor: pointer;
+}
