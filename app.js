@@ -298,6 +298,25 @@ completeProfileForm?.addEventListener("submit", async (e) => {
 });
 
 /* =========================
+   GENERIC COLLAPSIBLE CARD TOGGLE
+   Any card with class "collapsible-card" containing a
+   [data-role="toggle-card"] header will expand/collapse on tap.
+   Buttons inside the card's body are unaffected since they live
+   outside the header region.
+   ========================= */
+
+document.addEventListener("click", (e) => {
+  const header = e.target.closest('[data-role="toggle-card"]');
+  if (!header) return;
+
+  const card = header.closest(".collapsible-card");
+  if (!card) return;
+
+  card.classList.toggle("expanded");
+});
+
+
+/* =========================
    AUTH HELPER
    ========================= */
 
@@ -831,12 +850,18 @@ if (adminAnnouncementList) {
         const announcement = doc.data();
 
         const card = document.createElement("div");
-        card.className = "event-card admin-card";
+        card.className = "event-card admin-card collapsible-card";
 
         card.innerHTML = `
-          <div class="event-info">
-            ${announcement.pinned ? '<span class="status-badge status-ongoing">PINNED</span>' : ""}
-            <h3>${announcement.title}</h3>
+          <div class="collapsible-header" data-role="toggle-card">
+            <div class="collapsible-header-text">
+              <h3>${announcement.title}</h3>
+              ${announcement.pinned ? '<span class="status-badge status-ongoing">PINNED</span>' : ""}
+            </div>
+            <span class="collapsible-chevron">▾</span>
+          </div>
+
+          <div class="collapsible-body">
             <p class="announcement-text">${announcement.body}</p>
             <p class="event-meta">Posted ${formatAnnouncementDate(announcement.createdAt)}</p>
 
@@ -1026,11 +1051,18 @@ if (adminEventList) {
         const event = doc.data();
 
         const card = document.createElement("div");
-        card.className = "event-card admin-card";
+        card.className = "event-card admin-card collapsible-card";
 
         card.innerHTML = `
-          <div class="event-info">
-            <h3>${event.title}</h3>
+          <div class="collapsible-header" data-role="toggle-card">
+            <div class="collapsible-header-text">
+              <h3>${event.title}</h3>
+              <span class="status-badge status-${event.status}">${event.status.toUpperCase()}</span>
+            </div>
+            <span class="collapsible-chevron">▾</span>
+          </div>
+
+          <div class="collapsible-body">
             <p class="event-meta">
               ${event.date} • ${event.time}
             </p>
@@ -1038,11 +1070,6 @@ if (adminEventList) {
               📍 ${event.location}
             </p>
 
-            <span class="status-badge status-${event.status}">
-              ${event.status.toUpperCase()}
-            </span>
-
-   
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
               data-id="${doc.id}"
@@ -1052,14 +1079,12 @@ if (adminEventList) {
                 <span>Status</span>
               </button>
 
-
               <button class="icon-btn edit"
                 data-id="${doc.id}"
                 title="Edit Event">
                 ✏️
                 <span>Edit</span>
               </button>
-
 
               <button class="icon-btn archive"
                 data-id="${doc.id}"
@@ -1076,8 +1101,6 @@ if (adminEventList) {
                 <span>Registrants</span>
               </button>
             </div>
-
-
           </div>
         `;
 
@@ -1591,23 +1614,32 @@ if (conversationsList) {
 
       snapshot.forEach((doc) => {
         const convo = doc.data();
+        const name = convo.userFullName || "Unknown";
+        const initials = name
+          .split(/\s+/)
+          .map(w => w[0])
+          .slice(0, 2)
+          .join("")
+          .toUpperCase();
 
-        const card = document.createElement("div");
-        card.className = "event-card";
-        card.setAttribute("data-role", "open-conversation");
-        card.setAttribute("data-id", doc.id);
-        card.setAttribute("data-name", convo.userFullName || "Unknown");
-        card.style.cursor = "pointer";
+        const row = document.createElement("div");
+        row.className = "convo-row";
+        row.setAttribute("data-role", "open-conversation");
+        row.setAttribute("data-id", doc.id);
+        row.setAttribute("data-name", name);
 
-        card.innerHTML = `
-          <div class="event-header">
-            <h3 class="event-title">${convo.userFullName || "Unknown"}</h3>
-            ${convo.unreadByAdmin ? '<span class="status-badge status-ongoing">NEW</span>' : ""}
+        row.innerHTML = `
+          <div class="convo-avatar">${initials || "?"}</div>
+          <div class="convo-body">
+            <div class="convo-top-line">
+              <span class="convo-name">${name}</span>
+              ${convo.unreadByAdmin ? '<span class="convo-dot"></span>' : ""}
+            </div>
+            <p class="convo-preview">${convo.lastMessageText || ""}</p>
           </div>
-          <p class="event-meta">${convo.lastMessageText || ""}</p>
         `;
 
-        conversationsList.appendChild(card);
+        conversationsList.appendChild(row);
       });
     }, (err) => {
       console.error("Failed to load conversations:", err);
@@ -1730,44 +1762,48 @@ if (idApplicationsList) {
         const status = app.idStatus || "pending";
 
         const card = document.createElement("div");
-        card.className = "event-card admin-card";
+        card.className = "event-card admin-card collapsible-card";
 
         card.innerHTML = `
-          <div class="id-app-row">
-            ${app.photoData ? `<img class="id-app-photo" src="${app.photoData}" alt="${app.fullName || ""}">` : ""}
-            <div class="event-info">
+          <div class="collapsible-header" data-role="toggle-card">
+            <div class="collapsible-header-text">
+              ${app.photoData ? `<img class="id-app-thumb" src="${app.photoData}" alt="${app.fullName || ""}">` : ""}
               <h3>${app.fullName || "Unknown"}</h3>
-              <p class="event-meta">${app.address || ""}</p>
-              <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
-              ${app.idNumber ? `<p class="event-meta"><strong>${app.idNumber}</strong></p>` : ""}
               <span class="status-badge ${idStatusBadgeClass(status)}">${status.toUpperCase()}</span>
             </div>
+            <span class="collapsible-chevron">▾</span>
           </div>
 
-          <div class="admin-actions horizontal">
-            <button class="icon-btn status"
-              data-role="approve-id" data-id="${doc.id}"
-              ${status !== "pending" ? "disabled" : ""}
-              title="Approve">
-              ✅
-              <span>Approve</span>
-            </button>
+          <div class="collapsible-body">
+            <p class="event-meta">${app.address || ""}</p>
+            <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
+            ${app.idNumber ? `<p class="event-meta"><strong>${app.idNumber}</strong></p>` : ""}
 
-            <button class="icon-btn archive"
-              data-role="reject-id" data-id="${doc.id}"
-              ${status !== "pending" ? "disabled" : ""}
-              title="Reject">
-              ❌
-              <span>Reject</span>
-            </button>
+            <div class="admin-actions horizontal">
+              <button class="icon-btn status"
+                data-role="approve-id" data-id="${doc.id}"
+                ${status !== "pending" ? "disabled" : ""}
+                title="Approve">
+                ✅
+                <span>Approve</span>
+              </button>
 
-            <button class="icon-btn edit"
-              data-role="generate-id" data-id="${doc.id}"
-              ${status !== "approved" ? "disabled" : ""}
-              title="${status === "approved" ? "Generate ID" : "Approve first"}">
-              🪪
-              <span>Generate ID</span>
-            </button>
+              <button class="icon-btn archive"
+                data-role="reject-id" data-id="${doc.id}"
+                ${status !== "pending" ? "disabled" : ""}
+                title="Reject">
+                ❌
+                <span>Reject</span>
+              </button>
+
+              <button class="icon-btn edit"
+                data-role="generate-id" data-id="${doc.id}"
+                ${status !== "approved" ? "disabled" : ""}
+                title="${status === "approved" ? "Generate ID" : "Approve first"}">
+                🪪
+                <span>Generate ID</span>
+              </button>
+            </div>
           </div>
         `;
 
@@ -2076,6 +2112,11 @@ if (chatThread) {
 const userMessagesStatus = document.getElementById("userMessagesStatus");
 
 if (userMessagesStatus) {
+  userMessagesStatus.classList.add("clickable");
+  userMessagesStatus.addEventListener("click", () => {
+    window.location.href = "messages.html";
+  });
+
   waitForUser().then((user) => {
     if (!user) return;
 
@@ -2083,9 +2124,9 @@ if (userMessagesStatus) {
       .onSnapshot((doc) => {
         const unread = doc.exists && doc.data().unreadByUser;
         userMessagesStatus.innerHTML = `
-          <button type="button" class="action-card small" onclick="window.location.href='messages.html'">
-            ${unread ? "🔴 " : ""}Open Messages
-          </button>
+          <span class="quick-access-icon">💬</span>
+          <span class="quick-access-label">Messages</span>
+          ${unread ? '<span class="quick-access-badge">New</span>' : ""}
         `;
       }, (err) => {
         console.error("Failed to load message status:", err);
@@ -2113,27 +2154,17 @@ if (idApplicationStatusEl) {
       const status = data.idStatus || "pending"; // profile-complete users default to pending
       myIdApplicationData = data;
 
-      const badgeClass = status === "approved" ? "status-upcoming"
-        : status === "rejected" ? "status-archived"
-        : "status-ongoing";
-
       let actionHtml = "";
       if (status === "approved") {
-        actionHtml = `<button type="button" class="action-card small" data-role="download-id">
-          Download My ID
-        </button>`;
-      } else if (status === "rejected") {
-        actionHtml = '<p class="dashboard-subtext">Contact the SK office for details.</p>';
-      } else {
-        actionHtml = '<p class="dashboard-subtext">Waiting for admin review.</p>';
+        actionHtml = `<button type="button" class="quick-access-action" data-role="download-id">Download</button>`;
       }
 
       idApplicationStatusEl.innerHTML = `
-        <div class="event-card">
-          <span class="status-badge ${badgeClass}">${status.toUpperCase()}</span>
-          ${data.idNumber ? `<p class="event-meta"><strong>${data.idNumber}</strong></p>` : ""}
-          ${actionHtml}
-        </div>
+        <span class="quick-access-icon">🪪</span>
+        <span class="quick-access-label">SK ID</span>
+        <span class="quick-access-badge">${status.toUpperCase()}</span>
+        ${data.idNumber ? `<span class="dashboard-subtext">${data.idNumber}</span>` : ""}
+        ${actionHtml}
       `;
     } catch (err) {
       console.error("Failed to load ID status:", err);
