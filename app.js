@@ -209,6 +209,18 @@ auth.onAuthStateChanged(async (user) => {
       .slice(0, 2)
       .join("")
       .toUpperCase();
+
+    // Show the user's actual photo as their avatar, Facebook-profile-style,
+    // falling back to initials if no photo is on file.
+    if (userData.photoData) {
+      const avatarCircle = avatarInitials.closest(".avatar-circle");
+      if (avatarCircle) {
+        avatarCircle.style.backgroundImage = `url(${userData.photoData})`;
+        avatarCircle.style.backgroundSize = "cover";
+        avatarCircle.style.backgroundPosition = "center";
+        avatarInitials.style.display = "none";
+      }
+    }
   }
 });
 
@@ -296,6 +308,31 @@ completeProfileForm?.addEventListener("submit", async (e) => {
     completeProfileSubmitBtn.textContent = "Save and Continue";
   }
 });
+
+/* =========================
+   EVENT STATUS HELPERS
+   Events auto-transition to "completed" once their date has passed —
+   there's no backend scheduler (would need the paid Blaze plan), so this
+   runs client-side: whenever the admin event list renders, any past-due
+   event gets its status corrected in Firestore. The dashboard also
+   applies the same logic when deciding what counts as "upcoming", so
+   users never see a stale past event even if no admin has visited
+   recently to trigger the Firestore write.
+   ========================= */
+
+function todayDateStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// What the status SHOULD read as right now, given the event's date —
+// without mutating anything. "archived" always wins regardless of date.
+function getDisplayEventStatus(event) {
+  if (event.status === "archived") return "archived";
+  if (event.date && event.date < todayDateStr() && event.status !== "completed") {
+    return "completed";
+  }
+  return event.status;
+}
 
 /* =========================
    GENERIC COLLAPSIBLE CARD TOGGLE
@@ -1035,7 +1072,7 @@ const adminEventList = document.getElementById("adminEventList");
 
 if (adminEventList) {
   db.collection("events")
-    .orderBy("createdAt", "desc")
+    .orderBy("date", "desc")
     .onSnapshot((snapshot) => {
 
       // Clear list
@@ -1049,6 +1086,15 @@ if (adminEventList) {
 
       snapshot.forEach((doc) => {
         const event = doc.data();
+        const displayStatus = getDisplayEventStatus(event);
+
+        // Auto-correct the stored status once its date has passed.
+        // Self-limiting: once status is actually "completed" in Firestore,
+        // this condition stops matching, so it won't loop.
+        if (displayStatus === "completed" && event.status !== "completed") {
+          db.collection("events").doc(doc.id).update({ status: "completed" })
+            .catch((err) => console.error("Auto-complete failed:", err));
+        }
 
         const card = document.createElement("div");
         card.className = "event-card admin-card collapsible-card";
@@ -1057,7 +1103,7 @@ if (adminEventList) {
           <div class="collapsible-header" data-role="toggle-card">
             <div class="collapsible-header-text">
               <h3>${event.title}</h3>
-              <span class="status-badge status-${event.status}">${event.status.toUpperCase()}</span>
+              <span class="status-badge status-${displayStatus}">${displayStatus.toUpperCase()}</span>
             </div>
             <span class="collapsible-chevron">▾</span>
           </div>
@@ -1073,7 +1119,7 @@ if (adminEventList) {
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
               data-id="${doc.id}"
-              data-status="${event.status}"
+              data-status="${displayStatus}"
               title="Change Status">
                 ⏳
                 <span>Status</span>
@@ -1935,13 +1981,22 @@ if (userEventList) {
 
         userEventList.innerHTML = "";
 
-        if (snapshot.empty) {
+        // Client-side filter + sort — avoids needing a composite Firestore
+        // index (an 'in' query + orderBy on a different field requires one),
+        // and doubles as a safety net so a past-due event never shows as
+        // "upcoming" here even if no admin has visited recently to trigger
+        // the Firestore status correction.
+        const docs = snapshot.docs
+          .filter((d) => getDisplayEventStatus(d.data()) !== "completed")
+          .sort((a, b) => (b.data().date || "").localeCompare(a.data().date || ""));
+
+        if (docs.length === 0) {
           userEventList.innerHTML =
             '<p class="dashboard-subtext">No upcoming events.</p>';
           return;
         }
 
-        snapshot.forEach((doc) => {
+        docs.forEach((doc) => {
           const event = doc.data();
           const isJoined = myRegisteredEventIds.has(doc.id);
 
