@@ -186,12 +186,12 @@ button:active {
 }
 
 .dashboard-section {
-  margin-bottom: 36px;
+  margin-bottom: 20px;
 }
 
 .section-title {
-  font-size: 18px;
-  margin-bottom: 16px;
+  font-size: 15px;
+  margin-bottom: 10px;
   text-align: left;
 }
 
@@ -315,30 +315,39 @@ button:active {
 
 .admin-actions-grid {
   display: grid;
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .admin-card {
-  padding: 20px;
-  border-radius: 18px;
+  padding: 12px;
+  border-radius: 14px;
   background: var(--gray);
 }
 
 .admin-card h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .admin-card p {
-  font-size: 14px;
-  color: #555;
-  margin-bottom: 16px;
+  display: none;
 }
 
 .admin-card-actions {
   display: grid;
-  gap: 12px;
+  gap: 6px;
+}
+
+.admin-card .action-card {
+  padding: 8px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 /* =========================
@@ -595,12 +604,12 @@ button:active {
 }
 
 .dashboard-section {
-  margin-bottom: 36px;
+  margin-bottom: 20px;
 }
 
 .section-title {
-  font-size: 18px;
-  margin-bottom: 16px;
+  font-size: 15px;
+  margin-bottom: 10px;
   text-align: left;
 }
 
@@ -724,30 +733,39 @@ button:active {
 
 .admin-actions-grid {
   display: grid;
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .admin-card {
-  padding: 20px;
-  border-radius: 18px;
+  padding: 12px;
+  border-radius: 14px;
   background: var(--gray);
 }
 
 .admin-card h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .admin-card p {
-  font-size: 14px;
-  color: #555;
-  margin-bottom: 16px;
+  display: none;
 }
 
 .admin-card-actions {
   display: grid;
-  gap: 12px;
+  gap: 6px;
+}
+
+.admin-card .action-card {
+  padding: 8px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 /* =========================
@@ -1316,4 +1334,122 @@ textarea {
   font-size: 12px;
   color: #555;
   margin-top: 4px;
+}
+
+/* =========================
+   DASHBOARD QUICK ACCESS TILES
+   ========================= */
+
+.quick-access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.quick-access-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: var(--gray);
+  text-align: center;
+  min-height: 88px;
+}
+
+.quick-access-tile.clickable {
+  cursor: pointer;
+}
+
+.quick-access-icon {
+  font-size: 22px;
+}
+
+.quick-access-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quick-access-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--orange-primary);
+  color: var(--light);
+}
+
+.quick-access-action {
+  all: unset;
+  cursor: pointer;
+  margin-top: 4px;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 2px solid var(--green-primary);
+  background: var(--light);
+}
+
+.quick-access-action:hover {
+  background: var(--green-primary);
+  color: var(--light);
+}
+
+/* =========================
+   RESPONSIVE: TABLET & DESKTOP
+   Mobile is the default (unscoped) styling above. These progressively
+   widen the functional screens (dashboard, admin panel, admin subpages)
+   to use the extra space on larger screens. Plain .app-container pages
+   (login, signup, complete-profile) intentionally stay narrow — a
+   stretched-out login form on a wide screen reads as broken, not responsive.
+   ========================= */
+
+@media (min-width: 640px) {
+  .app-container.dashboard,
+  .app-container.admin-dashboard,
+  .app-container.admin-events {
+    max-width: 640px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .admin-actions-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .event-list {
+    grid-template-columns: repeat(2, 1fr);
+    align-items: start;
+  }
+
+  .announcement-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Forms stay comfortably narrow and centered even inside a wider
+     container — only list/grid content should use the extra width. */
+  .admin-form {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-container.dashboard,
+  .app-container.admin-dashboard,
+  .app-container.admin-events {
+    max-width: 920px;
+    padding: 40px;
+  }
+
+  .event-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .chat-thread {
+    max-height: 520px;
+  }
 }
