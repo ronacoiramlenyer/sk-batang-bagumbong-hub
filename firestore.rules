@@ -86,8 +86,31 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------------------------
+    // idApplications/{userId}   (doc ID == the applicant's uid)
+    // ---------------------------
+    match /idApplications/{userId} {
+      // Owner reads their own; admin reads all (needed for the approval queue).
+      allow read: if isOwner(userId) || isAdmin();
+
+      // First submission — must be the owner's own doc, status starts pending.
+      allow create: if isOwner(userId) &&
+        request.resource.data.userId == userId &&
+        request.resource.data.status == 'pending';
+
+      // Owner can edit/resubmit only while still pending, and can't set
+      // their own status. Admin can update anytime (approve/reject/etc).
+      allow update: if isAdmin() ||
+        (isOwner(userId) &&
+         resource.data.status == 'pending' &&
+         request.resource.data.status == 'pending' &&
+         request.resource.data.userId == userId);
+
+      allow delete: if isAdmin();
+    }
+
     // Default deny for anything not explicitly matched above
-    // (idApplications, certificates, conversations, etc.
+    // (certificates, conversations, etc.
     // will need their own rules blocks as those features are built).
     match /{document=**} {
       allow read, write: if false;

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SK Barangay ID Application</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <section>
+      <h1>SK Barangay ID</h1>
+      <p class="tagline" id="applyFormSubtext">
+        Fill out the form below to apply for your SK Barangay ID.
+      </p>
+
+      <div id="applyStatusBanner" class="hidden"></div>
+
+      <form id="idApplicationForm">
+
+        <label>Full Name</label>
+        <input id="idFullName" required>
+
+        <label>Address</label>
+        <input id="idAddress" required>
+
+        <label>Birthdate</label>
+        <input id="idBirthdate" type="date" required>
+
+        <label>Contact Number</label>
+        <input id="idContactNumber" type="tel" required>
+
+        <label>Photo (ID picture, clear front-facing)</label>
+        <input id="idPhotoFile" type="file" accept="image/png, image/jpeg">
+        <img id="idPhotoPreview" class="template-preview hidden" alt="Photo preview">
+        <p class="dashboard-subtext">
+          Photos are automatically resized before submitting.
+        </p>
+
+        <div id="applyError" class="form-error hidden"></div>
+
+        <button type="submit" id="idApplicationSubmitBtn" class="submit-btn">
+          Submit Application
+        </button>
+
+        <span class="back-link" onclick="window.location.href='dashboard.html'">← Back to Dashboard</span>
+      </form>
+    </section>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

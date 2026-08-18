@@ -80,11 +80,33 @@ registerForm?.addEventListener("submit", async (e) => {
    DASHBOARD / ADMIN AUTH GUARD
    ========================= */
 
+// Explicit page lists instead of substring matching — substring checks like
+// path.includes("admin.html") only match the literal page "admin.html" and
+// silently miss subpages like "admin-manage-events.html".
+const pageName = path.split("/").pop();
+
+const ADMIN_ONLY_PAGES = [
+  "admin.html",
+  "admin-add-events.html",
+  "admin-manage-events.html",
+  "admin-add-announcement.html",
+  "admin-manage-announcements.html",
+  "admin-certificate-template.html",
+  "admin-id-template.html",
+  "admin-manage-id-applications.html"
+];
+
+const AUTH_REQUIRED_PAGES = [
+  ...ADMIN_ONLY_PAGES,
+  "dashboard.html",
+  "apply-id.html"
+];
+
 auth.onAuthStateChanged(async (user) => {
 
   // 🚫 Not logged in
   if (!user) {
-    if (path.includes("dashboard.html") || path.includes("admin.html")) {
+    if (AUTH_REQUIRED_PAGES.includes(pageName)) {
       window.location.href = "index.html";
     }
     return;
@@ -98,8 +120,8 @@ auth.onAuthStateChanged(async (user) => {
 
   const role = doc.data().role;
 
-  // 🚫 Block user from admin
-  if (path.includes("admin.html") && role !== "admin") {
+  // 🚫 Block non-admins from any admin page
+  if (ADMIN_ONLY_PAGES.includes(pageName) && role !== "admin") {
     window.location.href = "dashboard.html";
     return;
   }
@@ -256,6 +278,42 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// Resizes an image file down to maxDimension on its longest side and
+// re-encodes as JPEG at the given quality, returning a data URL. Used to
+// keep uploaded photos small enough to store inline in a Firestore doc
+// (no Firebase Storage available on the free plan).
+function compressImageToDataUrl(file, maxDimension = 500, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+
+        if (width > height && width > maxDimension) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else if (height > maxDimension) {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 templateUploadForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -378,6 +436,157 @@ function downloadCanvasAsPng(canvas, filename) {
 function safeFilenamePart(text) {
   return (text || "certificate").trim().replace(/\s+/g, "_").replace(/[^\w-]/g, "");
 }
+
+
+/* =========================
+   ID CARD GENERATION (TEMPLATE + PHOTO + TEXT OVERLAY)
+   ========================= */
+
+const ID_TEMPLATE_DOC = db.collection("settings").doc("idTemplate");
+
+// Same idea as CERT_TEXT_CONFIG — percentages of the template's width/height,
+// so it scales with whatever size template gets uploaded. Adjust these once
+// a real ID template exists and text/photo placement needs fine-tuning.
+const ID_TEXT_CONFIG = {
+  name:      { xPct: 0.5, yPct: 0.62, fontPct: 0.032, weight: "bold",   color: "#1c1c1c" },
+  address:   { xPct: 0.5, yPct: 0.70, fontPct: 0.020, weight: "normal", color: "#333333" },
+  birthdate: { xPct: 0.5, yPct: 0.76, fontPct: 0.018, weight: "normal", color: "#333333" },
+  contact:   { xPct: 0.5, yPct: 0.82, fontPct: 0.018, weight: "normal", color: "#333333" }
+};
+
+// Photo placement, also as a fraction of the template's dimensions
+// (box position + size, not just a point).
+const ID_PHOTO_CONFIG = { xPct: 0.5, yPct: 0.30, widthPct: 0.30, heightPct: 0.30 };
+
+async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate, contactNumber }) {
+  const doc = await ID_TEMPLATE_DOC.get();
+  if (!doc.exists || !doc.data().imageData) {
+    throw new Error("No ID template has been uploaded yet.");
+  }
+
+  const templateImg = await loadImageFromUrl(doc.data().imageData);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = templateImg.naturalWidth;
+  canvas.height = templateImg.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(templateImg, 0, 0);
+
+  if (photoDataUrl) {
+    const photoImg = await loadImageFromUrl(photoDataUrl);
+    const boxWidth = ID_PHOTO_CONFIG.widthPct * canvas.width;
+    const boxHeight = ID_PHOTO_CONFIG.heightPct * canvas.height;
+    const boxX = ID_PHOTO_CONFIG.xPct * canvas.width - boxWidth / 2;
+    const boxY = ID_PHOTO_CONFIG.yPct * canvas.height - boxHeight / 2;
+
+    // Cover-fit the photo into its box without distorting aspect ratio
+    const photoRatio = photoImg.naturalWidth / photoImg.naturalHeight;
+    const boxRatio = boxWidth / boxHeight;
+    let sx = 0, sy = 0, sw = photoImg.naturalWidth, sh = photoImg.naturalHeight;
+
+    if (photoRatio > boxRatio) {
+      sw = sh * boxRatio;
+      sx = (photoImg.naturalWidth - sw) / 2;
+    } else {
+      sh = sw / boxRatio;
+      sy = (photoImg.naturalHeight - sh) / 2;
+    }
+
+    ctx.drawImage(photoImg, sx, sy, sw, sh, boxX, boxY, boxWidth, boxHeight);
+  }
+
+  function drawLine(text, cfg) {
+    if (!text) return;
+    const fontSize = Math.round(cfg.fontPct * canvas.width);
+    ctx.font = `${cfg.weight} ${fontSize}px system-ui, sans-serif`;
+    ctx.fillStyle = cfg.color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, cfg.xPct * canvas.width, cfg.yPct * canvas.height);
+  }
+
+  drawLine(fullName, ID_TEXT_CONFIG.name);
+  drawLine(address, ID_TEXT_CONFIG.address);
+  drawLine(birthdate, ID_TEXT_CONFIG.birthdate);
+  drawLine(contactNumber, ID_TEXT_CONFIG.contact);
+
+  return canvas;
+}
+
+
+/* =========================
+   ID TEMPLATE (ADMIN UPLOAD)
+   ========================= */
+
+const idTemplatePreview = document.getElementById("idTemplatePreview");
+const noIdTemplateText = document.getElementById("noIdTemplateText");
+const idTemplateUploadForm = document.getElementById("idTemplateUploadForm");
+const idTemplateFileInput = document.getElementById("idTemplateFile");
+
+async function loadIdTemplatePreview() {
+  if (!idTemplatePreview) return;
+
+  try {
+    const doc = await ID_TEMPLATE_DOC.get();
+    if (doc.exists && doc.data().imageData) {
+      idTemplatePreview.src = doc.data().imageData;
+      idTemplatePreview.classList.remove("hidden");
+      noIdTemplateText?.classList.add("hidden");
+    } else {
+      idTemplatePreview.classList.add("hidden");
+      noIdTemplateText?.classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Failed to load ID template:", err);
+    idTemplatePreview.classList.add("hidden");
+    noIdTemplateText?.classList.remove("hidden");
+  }
+}
+
+if (idTemplatePreview) {
+  loadIdTemplatePreview();
+}
+
+idTemplateUploadForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const file = idTemplateFileInput.files[0];
+  if (!file) {
+    alert("Please choose an image file.");
+    return;
+  }
+
+  if (file.size > CERT_TEMPLATE_MAX_BYTES) {
+    alert(
+      `That image is too large (${Math.round(file.size / 1024)}KB). ` +
+      `Please use an image under ${Math.round(CERT_TEMPLATE_MAX_BYTES / 1024)}KB.`
+    );
+    return;
+  }
+
+  const submitBtn = idTemplateUploadForm.querySelector("button[type='submit']");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Uploading…";
+
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+
+    await ID_TEMPLATE_DOC.set({
+      imageData: dataUrl,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await loadIdTemplatePreview();
+    alert("ID template uploaded.");
+    idTemplateUploadForm.reset();
+  } catch (err) {
+    console.error("ID template upload failed:", err);
+    alert("Upload failed: " + err.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Upload Template";
+  }
+});
 
 
 /* =========================
@@ -1113,6 +1322,141 @@ generateAllCertificatesBtn?.addEventListener("click", async () => {
 
 
 /* =========================
+   ADMIN – SK ID APPLICATIONS
+   ========================= */
+
+const idApplicationsList = document.getElementById("idApplicationsList");
+
+function idStatusBadgeClass(status) {
+  if (status === "approved") return "status-upcoming";
+  if (status === "rejected") return "status-archived";
+  return "status-ongoing";
+}
+
+if (idApplicationsList) {
+  db.collection("idApplications")
+    .orderBy("submittedAt", "desc")
+    .onSnapshot((snapshot) => {
+
+      idApplicationsList.innerHTML = "";
+
+      if (snapshot.empty) {
+        idApplicationsList.innerHTML =
+          '<p class="dashboard-subtext">No applications yet.</p>';
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const app = doc.data();
+        const status = app.status || "pending";
+
+        const card = document.createElement("div");
+        card.className = "event-card admin-card";
+
+        card.innerHTML = `
+          <div class="id-app-row">
+            ${app.photoData ? `<img class="id-app-photo" src="${app.photoData}" alt="${app.fullName || ""}">` : ""}
+            <div class="event-info">
+              <h3>${app.fullName || "Unknown"}</h3>
+              <p class="event-meta">${app.address || ""}</p>
+              <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
+              <span class="status-badge ${idStatusBadgeClass(status)}">${status.toUpperCase()}</span>
+            </div>
+          </div>
+
+          <div class="admin-actions horizontal">
+            <button class="icon-btn status"
+              data-role="approve-id" data-id="${doc.id}"
+              ${status !== "pending" ? "disabled" : ""}
+              title="Approve">
+              ✅
+              <span>Approve</span>
+            </button>
+
+            <button class="icon-btn archive"
+              data-role="reject-id" data-id="${doc.id}"
+              ${status !== "pending" ? "disabled" : ""}
+              title="Reject">
+              ❌
+              <span>Reject</span>
+            </button>
+
+            <button class="icon-btn edit"
+              data-role="generate-id" data-id="${doc.id}"
+              ${status !== "approved" ? "disabled" : ""}
+              title="${status === "approved" ? "Generate ID" : "Approve first"}">
+              🪪
+              <span>Generate ID</span>
+            </button>
+          </div>
+        `;
+
+        idApplicationsList.appendChild(card);
+      });
+    }, (err) => {
+      console.error("Failed to load ID applications:", err);
+      idApplicationsList.innerHTML =
+        '<p class="dashboard-subtext">Failed to load applications.</p>';
+    });
+}
+
+// Approve / Reject
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="approve-id"], [data-role="reject-id"]');
+  if (!btn || btn.disabled) return;
+
+  const applicationId = btn.dataset.id;
+  const newStatus = btn.dataset.role === "approve-id" ? "approved" : "rejected";
+
+  if (newStatus === "rejected" && !confirm("Reject this application?")) return;
+
+  try {
+    const admin = auth.currentUser;
+    await db.collection("idApplications").doc(applicationId).update({
+      status: newStatus,
+      reviewedBy: admin.uid,
+      reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.error("Failed to update application status:", err);
+    alert("Failed to update status.");
+  }
+});
+
+// Generate ID card for an approved application
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="generate-id"]');
+  if (!btn || btn.disabled) return;
+
+  const applicationId = btn.dataset.id;
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "Generating…";
+
+  try {
+    const doc = await db.collection("idApplications").doc(applicationId).get();
+    if (!doc.exists) return;
+    const app = doc.data();
+
+    const canvas = await generateIdCardCanvas({
+      photoDataUrl: app.photoData,
+      fullName: app.fullName,
+      address: app.address,
+      birthdate: app.birthdate,
+      contactNumber: app.contactNumber
+    });
+    downloadCanvasAsPng(canvas, `SK-ID-${safeFilenamePart(app.fullName)}.png`);
+  } catch (err) {
+    console.error("ID generation failed:", err);
+    alert("Couldn't generate the ID. Has the ID template been uploaded yet? (Admin Panel → SK ID → ID Template)");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+});
+
+
+/* =========================
    USER DASHBOARD – RENDER EVENTS
    ========================= */
 
@@ -1215,6 +1559,229 @@ document.addEventListener("click", async (e) => {
     alert("Could not register. You may already be registered, or something went wrong.");
     btn.disabled = false;
     btn.textContent = "Join Event";
+  }
+});
+
+
+/* =========================
+   USER – SK ID APPLICATION FORM (apply-id.html)
+   ========================= */
+
+const idApplicationForm = document.getElementById("idApplicationForm");
+const applyStatusBanner = document.getElementById("applyStatusBanner");
+const applyError = document.getElementById("applyError");
+const idApplicationSubmitBtn = document.getElementById("idApplicationSubmitBtn");
+const idFullNameInput = document.getElementById("idFullName");
+const idAddressInput = document.getElementById("idAddress");
+const idBirthdateInput = document.getElementById("idBirthdate");
+const idContactNumberInput = document.getElementById("idContactNumber");
+const idPhotoFileInput = document.getElementById("idPhotoFile");
+const idPhotoPreview = document.getElementById("idPhotoPreview");
+
+let pendingPhotoDataUrl = null;  // newly-selected, compressed photo staged for submit
+let existingPhotoDataUrl = null; // photo already on file, kept if not replaced
+
+function showApplyBanner(text, type) {
+  if (!applyStatusBanner) return;
+  applyStatusBanner.textContent = text;
+  applyStatusBanner.className = `status-banner status-banner-${type}`;
+  applyStatusBanner.classList.remove("hidden");
+}
+
+idPhotoFileInput?.addEventListener("change", async () => {
+  const file = idPhotoFileInput.files[0];
+  if (!file) return;
+
+  try {
+    pendingPhotoDataUrl = await compressImageToDataUrl(file);
+    idPhotoPreview.src = pendingPhotoDataUrl;
+    idPhotoPreview.classList.remove("hidden");
+  } catch (err) {
+    console.error("Photo processing failed:", err);
+    alert("Couldn't process that photo. Try a different image.");
+  }
+});
+
+if (idApplicationForm) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      if (userDoc.exists && !idFullNameInput.value) {
+        idFullNameInput.value = userDoc.data().fullName || "";
+      }
+    } catch (err) {
+      console.error("Failed to prefill name:", err);
+    }
+
+    try {
+      const appDoc = await db.collection("idApplications").doc(user.uid).get();
+      if (!appDoc.exists) return;
+
+      const data = appDoc.data();
+
+      idFullNameInput.value = data.fullName || "";
+      idAddressInput.value = data.address || "";
+      idBirthdateInput.value = data.birthdate || "";
+      idContactNumberInput.value = data.contactNumber || "";
+      existingPhotoDataUrl = data.photoData || null;
+
+      if (existingPhotoDataUrl) {
+        idPhotoPreview.src = existingPhotoDataUrl;
+        idPhotoPreview.classList.remove("hidden");
+      }
+
+      if (data.status === "pending") {
+        showApplyBanner("Your application is pending review. You can still edit and resubmit.", "pending");
+      } else if (data.status === "approved") {
+        showApplyBanner("Your application has already been approved.", "approved");
+        idApplicationForm.classList.add("hidden");
+      } else if (data.status === "rejected") {
+        showApplyBanner("Your application was not approved. Contact the SK office for details.", "rejected");
+        idApplicationForm.classList.add("hidden");
+      }
+    } catch (err) {
+      console.error("Failed to load existing application:", err);
+    }
+  });
+}
+
+idApplicationForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  applyError?.classList.add("hidden");
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const photoData = pendingPhotoDataUrl || existingPhotoDataUrl;
+
+  if (!photoData) {
+    applyError.textContent = "Please upload a photo.";
+    applyError.classList.remove("hidden");
+    return;
+  }
+
+  idApplicationSubmitBtn.disabled = true;
+  idApplicationSubmitBtn.textContent = "Submitting…";
+
+  try {
+    const appRef = db.collection("idApplications").doc(user.uid);
+    const existingSnap = await appRef.get();
+
+    await appRef.set({
+      userId: user.uid,
+      fullName: idFullNameInput.value.trim(),
+      address: idAddressInput.value.trim(),
+      birthdate: idBirthdateInput.value,
+      contactNumber: idContactNumberInput.value.trim(),
+      photoData,
+      status: "pending",
+      submittedAt: existingSnap.exists
+        ? existingSnap.data().submittedAt
+        : firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    alert("Application submitted. You'll be notified once it's reviewed.");
+    window.location.href = "dashboard.html";
+  } catch (err) {
+    console.error("Application submission failed:", err);
+    applyError.textContent = "Something went wrong. Please try again.";
+    applyError.classList.remove("hidden");
+  } finally {
+    idApplicationSubmitBtn.disabled = false;
+    idApplicationSubmitBtn.textContent = "Submit Application";
+  }
+});
+
+
+/* =========================
+   USER DASHBOARD – SK ID STATUS
+   ========================= */
+
+const idApplicationStatusEl = document.getElementById("idApplicationStatus");
+let myIdApplicationData = null;
+
+if (idApplicationStatusEl) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const appDoc = await db.collection("idApplications").doc(user.uid).get();
+
+      if (!appDoc.exists) {
+        idApplicationStatusEl.innerHTML = `
+          <div class="event-card">
+            <p class="event-meta">You haven't applied for an SK Barangay ID yet.</p>
+            <button type="button" class="action-card small"
+              onclick="window.location.href='apply-id.html'">
+              Apply Now
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      const data = appDoc.data();
+      myIdApplicationData = data;
+
+      const badgeClass = data.status === "approved" ? "status-upcoming"
+        : data.status === "rejected" ? "status-archived"
+        : "status-ongoing";
+
+      let actionHtml = "";
+      if (data.status === "pending") {
+        actionHtml = `<button type="button" class="action-card small"
+          onclick="window.location.href='apply-id.html'">
+          View / Edit Application
+        </button>`;
+      } else if (data.status === "approved") {
+        actionHtml = `<button type="button" class="action-card small" data-role="download-id">
+          Download My ID
+        </button>`;
+      } else if (data.status === "rejected") {
+        actionHtml = '<p class="dashboard-subtext">Contact the SK office for details.</p>';
+      }
+
+      idApplicationStatusEl.innerHTML = `
+        <div class="event-card">
+          <span class="status-badge ${badgeClass}">${(data.status || "pending").toUpperCase()}</span>
+          ${actionHtml}
+        </div>
+      `;
+    } catch (err) {
+      console.error("Failed to load ID application status:", err);
+      idApplicationStatusEl.innerHTML =
+        '<p class="dashboard-subtext">Couldn\'t load status.</p>';
+    }
+  });
+}
+
+// Download the generated ID from the dashboard
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="download-id"]');
+  if (!btn || btn.disabled || !myIdApplicationData) return;
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generating…";
+
+  try {
+    const canvas = await generateIdCardCanvas({
+      photoDataUrl: myIdApplicationData.photoData,
+      fullName: myIdApplicationData.fullName,
+      address: myIdApplicationData.address,
+      birthdate: myIdApplicationData.birthdate,
+      contactNumber: myIdApplicationData.contactNumber
+    });
+    downloadCanvasAsPng(canvas, `SK-ID-${safeFilenamePart(myIdApplicationData.fullName)}.png`);
+  } catch (err) {
+    console.error("ID generation failed:", err);
+    alert("Couldn't generate your ID yet. The template may not be ready — please check back later.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 });
 

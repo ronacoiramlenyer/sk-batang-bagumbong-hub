@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – ID Template</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container admin-events">
+
+    <section class="admin-section">
+      <h2>SK Barangay ID Template</h2>
+      <p class="dashboard-subtext">
+        Upload the background design used for generated SK Barangay IDs.
+        Uploading a new image replaces the current template immediately.
+        Keep the file under 650KB.
+      </p>
+
+      <img id="idTemplatePreview" class="template-preview hidden" alt="Current ID template">
+      <p id="noIdTemplateText" class="dashboard-subtext">No template uploaded yet.</p>
+
+      <form id="idTemplateUploadForm" class="admin-form">
+        <label>Template Image (PNG or JPG)</label>
+        <input type="file" id="idTemplateFile" accept="image/png, image/jpeg" required>
+
+        <div class="form-actions">
+          <button type="submit" class="submit-btn">
+            Upload Template
+          </button>
+
+          <button type="button"
+            class="submit-btn secondary"
+            onclick="window.location.href='admin.html'">
+            Back
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

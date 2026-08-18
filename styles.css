@@ -1182,3 +1182,48 @@ textarea {
   background: var(--green-primary);
   color: var(--light);
 }
+
+/* =========================
+   SK ID APPLICATION STATUS BANNER
+   ========================= */
+
+.status-banner {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin: 16px 0;
+}
+
+.status-banner-pending {
+  background: #fff4e0;
+  color: #8a5300;
+}
+
+.status-banner-approved {
+  background: #e6f4ea;
+  color: #1e7e34;
+}
+
+.status-banner-rejected {
+  background: #fdecea;
+  color: #b00020;
+}
+
+/* =========================
+   ADMIN – ID APPLICATION CARD
+   ========================= */
+
+.id-app-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.id-app-photo {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+  border: 1px solid #ddd;
+}
