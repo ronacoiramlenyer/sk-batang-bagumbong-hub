@@ -1478,6 +1478,68 @@ generateAllCertificatesBtn?.addEventListener("click", async () => {
 
 
 /* =========================
+   ADMIN – OVERVIEW STATS ROLLUP
+   ========================= */
+
+const statUpcomingEvents = document.getElementById("statUpcomingEvents");
+const statTotalRegistrations = document.getElementById("statTotalRegistrations");
+const statTotalAttended = document.getElementById("statTotalAttended");
+const statPendingApplicants = document.getElementById("statPendingApplicants");
+const statApprovedApplicants = document.getElementById("statApprovedApplicants");
+const statUnreadMessages = document.getElementById("statUnreadMessages");
+
+if (statUpcomingEvents) {
+  db.collection("events")
+    .where("status", "in", ["upcoming", "ongoing"])
+    .onSnapshot((snapshot) => {
+      statUpcomingEvents.textContent = snapshot.size;
+    }, (err) => console.error("Overview: events count failed:", err));
+}
+
+if (statTotalRegistrations) {
+  db.collection("registrations").onSnapshot((snapshot) => {
+    statTotalRegistrations.textContent = snapshot.size;
+
+    let attended = 0;
+    snapshot.forEach((doc) => {
+      if (doc.data().attended) attended++;
+    });
+    if (statTotalAttended) statTotalAttended.textContent = attended;
+  }, (err) => console.error("Overview: registrations count failed:", err));
+}
+
+if (statPendingApplicants || statApprovedApplicants) {
+  db.collection("users")
+    .where("role", "==", "user")
+    .onSnapshot((snapshot) => {
+      let pending = 0;
+      let approved = 0;
+
+      snapshot.forEach((doc) => {
+        const u = doc.data();
+        const hasCompleteProfile = u.address && u.birthdate && u.contactNumber && u.photoData;
+        if (!hasCompleteProfile) return;
+
+        const status = u.idStatus || "pending";
+        if (status === "approved") approved++;
+        else if (status === "pending") pending++;
+      });
+
+      if (statPendingApplicants) statPendingApplicants.textContent = pending;
+      if (statApprovedApplicants) statApprovedApplicants.textContent = approved;
+    }, (err) => console.error("Overview: applicant counts failed:", err));
+}
+
+if (statUnreadMessages) {
+  db.collection("conversations")
+    .where("unreadByAdmin", "==", true)
+    .onSnapshot((snapshot) => {
+      statUnreadMessages.textContent = snapshot.size;
+    }, (err) => console.error("Overview: unread messages count failed:", err));
+}
+
+
+/* =========================
    ADMIN – UNREAD MESSAGES BADGE
    ========================= */
 
