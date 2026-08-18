@@ -11,7 +11,6 @@ firebase.initializeApp({
 
 const auth = firebase.auth();
 const db = firebase.firestore();
-const storage = firebase.storage();
 
 /* =========================
    PAGE DETECTION
@@ -208,25 +207,37 @@ if (createEventForm) {
    CERTIFICATE TEMPLATE (ADMIN UPLOAD)
    ========================= */
 
-// Fixed Storage path — uploading a new file here replaces the template
-// used everywhere certificates are generated. No code change needed
-// to swap designs later.
-const CERT_TEMPLATE_PATH = "certificateTemplate/template.png";
+// Stored as a base64 data URL in a single Firestore document — avoids
+// needing Firebase Storage (which requires the paid Blaze plan).
+// Firestore documents cap at 1MB, so the source image needs to stay small.
+const CERT_TEMPLATE_DOC = db.collection("settings").doc("certificateTemplate");
+const CERT_TEMPLATE_MAX_BYTES = 650 * 1024; // ~650KB, leaves room for base64 overhead
 
 const templatePreview = document.getElementById("templatePreview");
 const noTemplateText = document.getElementById("noTemplateText");
 const templateUploadForm = document.getElementById("templateUploadForm");
 const templateFileInput = document.getElementById("templateFile");
 
+let cachedTemplateDataUrl = null;
+
 async function loadTemplatePreview() {
   if (!templatePreview) return;
 
   try {
-    const url = await storage.ref(CERT_TEMPLATE_PATH).getDownloadURL();
-    templatePreview.src = url;
-    templatePreview.classList.remove("hidden");
-    noTemplateText?.classList.add("hidden");
+    const doc = await CERT_TEMPLATE_DOC.get();
+    if (doc.exists && doc.data().imageData) {
+      cachedTemplateDataUrl = doc.data().imageData;
+      templatePreview.src = cachedTemplateDataUrl;
+      templatePreview.classList.remove("hidden");
+      noTemplateText?.classList.add("hidden");
+    } else {
+      cachedTemplateDataUrl = null;
+      templatePreview.classList.add("hidden");
+      noTemplateText?.classList.remove("hidden");
+    }
   } catch (err) {
+    console.error("Failed to load template:", err);
+    cachedTemplateDataUrl = null;
     templatePreview.classList.add("hidden");
     noTemplateText?.classList.remove("hidden");
   }
@@ -234,6 +245,15 @@ async function loadTemplatePreview() {
 
 if (templatePreview) {
   loadTemplatePreview();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 templateUploadForm?.addEventListener("submit", async (e) => {
@@ -245,12 +265,27 @@ templateUploadForm?.addEventListener("submit", async (e) => {
     return;
   }
 
+  if (file.size > CERT_TEMPLATE_MAX_BYTES) {
+    alert(
+      `That image is too large (${Math.round(file.size / 1024)}KB). ` +
+      `Please use an image under ${Math.round(CERT_TEMPLATE_MAX_BYTES / 1024)}KB — ` +
+      `try compressing it or reducing its dimensions first.`
+    );
+    return;
+  }
+
   const submitBtn = templateUploadForm.querySelector("button[type='submit']");
   submitBtn.disabled = true;
   submitBtn.textContent = "Uploading…";
 
   try {
-    await storage.ref(CERT_TEMPLATE_PATH).put(file);
+    const dataUrl = await readFileAsDataUrl(file);
+
+    await CERT_TEMPLATE_DOC.set({
+      imageData: dataUrl,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
     await loadTemplatePreview();
     alert("Template uploaded. This is now used for every generated certificate.");
     templateUploadForm.reset();
@@ -280,7 +315,6 @@ const CERT_TEXT_CONFIG = {
 function loadImageFromUrl(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;
@@ -288,19 +322,19 @@ function loadImageFromUrl(src) {
 }
 
 async function getCertificateTemplateImage() {
-  const downloadUrl = await storage.ref(CERT_TEMPLATE_PATH).getDownloadURL();
-  // Fetch as a blob and load from a local object URL — avoids canvas
-  // "tainted" issues that can come from drawing a cross-origin image directly.
-  const response = await fetch(downloadUrl);
-  const blob = await response.blob();
-  const blobUrl = URL.createObjectURL(blob);
+  // Use the cached copy if we already have it (e.g. admin just loaded the
+  // upload page), otherwise fetch the template doc fresh.
+  let dataUrl = cachedTemplateDataUrl;
 
-  try {
-    const img = await loadImageFromUrl(blobUrl);
-    return img;
-  } finally {
-    URL.revokeObjectURL(blobUrl);
+  if (!dataUrl) {
+    const doc = await CERT_TEMPLATE_DOC.get();
+    if (!doc.exists || !doc.data().imageData) {
+      throw new Error("No certificate template has been uploaded yet.");
+    }
+    dataUrl = doc.data().imageData;
   }
+
+  return loadImageFromUrl(dataUrl);
 }
 
 async function generateCertificateCanvas({ fullName, eventTitle, eventDate }) {

@@ -76,6 +76,16 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ---------------------------
+    // settings/{docId}  (e.g. certificateTemplate)
+    // ---------------------------
+    match /settings/{docId} {
+      // Any signed-in user can read (needed to generate their own certificate).
+      allow read: if isSignedIn();
+      // Only admins can update settings like the certificate template.
+      allow write: if isAdmin();
+    }
+
     // Default deny for anything not explicitly matched above
     // (idApplications, certificates, conversations, etc.
     // will need their own rules blocks as those features are built).
