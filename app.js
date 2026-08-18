@@ -2112,8 +2112,13 @@ if (chatThread) {
 const messagesHeaderBtn = document.getElementById("messagesHeaderBtn");
 const messagesHeaderBadge = document.getElementById("messagesHeaderBadge");
 const avatarBtn = document.getElementById("avatarBtn");
+const profileHeaderBtn = document.getElementById("profileHeaderBtn");
 
 avatarBtn?.addEventListener("click", () => {
+  window.location.href = "profile.html";
+});
+
+profileHeaderBtn?.addEventListener("click", () => {
   window.location.href = "profile.html";
 });
 

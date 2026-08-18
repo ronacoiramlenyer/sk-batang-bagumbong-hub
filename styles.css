@@ -1596,11 +1596,17 @@ textarea {
   position: relative;
 }
 
-.header-icon-btn {
-  all: unset;
+.header-icon-row {
   position: absolute;
   top: 0;
   right: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.header-icon-btn {
+  all: unset;
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: 50%;
