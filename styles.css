@@ -1020,6 +1020,25 @@ textarea {
 }
 
 /* =========================
+   PINNED ANNOUNCEMENT CHECKBOX
+   ========================= */
+
+.pinned-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pinned-checkbox-label input[type="checkbox"] {
+  all: revert;
+  width: auto;
+  cursor: pointer;
+}
+
+/* =========================
    REGISTRANTS MODAL
    ========================= */
 

@@ -203,6 +203,263 @@ if (createEventForm) {
 
 
 /* =========================
+   ADMIN – CREATE ANNOUNCEMENT
+   ========================= */
+
+const createAnnouncementForm = document.getElementById("createAnnouncementForm");
+
+if (createAnnouncementForm) {
+  createAnnouncementForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const titleInput = document.getElementById("announcementTitle");
+    const bodyInput = document.getElementById("announcementBody");
+    const pinnedInput = document.getElementById("announcementPinned");
+
+    const title = titleInput.value.trim();
+    const body = bodyInput.value.trim();
+    const pinned = pinnedInput.checked;
+
+    if (!title || !body) {
+      alert("Please complete all required fields.");
+      return;
+    }
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        alert("You must be logged in as admin.");
+        return;
+      }
+
+      await db.collection("announcements").add({
+        title,
+        body,
+        pinned,
+        createdBy: user.uid,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      createAnnouncementForm.reset();
+      alert("Announcement posted successfully.");
+
+    } catch (err) {
+      console.error("Create announcement error:", err);
+      alert(err.message);
+    }
+  });
+}
+
+
+/* =========================
+   ADMIN – RENDER ANNOUNCEMENTS (READ/EDIT/DELETE)
+   ========================= */
+
+const adminAnnouncementList = document.getElementById("adminAnnouncementList");
+
+function formatAnnouncementDate(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "Just now";
+  return timestamp.toDate().toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric"
+  });
+}
+
+if (adminAnnouncementList) {
+  db.collection("announcements")
+    .orderBy("createdAt", "desc")
+    .onSnapshot((snapshot) => {
+
+      adminAnnouncementList.innerHTML = "";
+
+      if (snapshot.empty) {
+        adminAnnouncementList.innerHTML =
+          '<p class="dashboard-subtext">No announcements yet.</p>';
+        return;
+      }
+
+      // Stable sort: pinned first, otherwise keep createdAt desc order
+      const docs = snapshot.docs.slice().sort((a, b) => {
+        const aPinned = a.data().pinned ? 1 : 0;
+        const bPinned = b.data().pinned ? 1 : 0;
+        return bPinned - aPinned;
+      });
+
+      docs.forEach((doc) => {
+        const announcement = doc.data();
+
+        const card = document.createElement("div");
+        card.className = "event-card admin-card";
+
+        card.innerHTML = `
+          <div class="event-info">
+            ${announcement.pinned ? '<span class="status-badge status-ongoing">PINNED</span>' : ""}
+            <h3>${announcement.title}</h3>
+            <p class="announcement-text">${announcement.body}</p>
+            <p class="event-meta">Posted ${formatAnnouncementDate(announcement.createdAt)}</p>
+
+            <div class="admin-actions horizontal">
+              <button class="icon-btn edit"
+                data-id="${doc.id}"
+                title="Edit Announcement">
+                ✏️
+                <span>Edit</span>
+              </button>
+
+              <button class="icon-btn archive"
+                data-id="${doc.id}"
+                title="Delete Announcement"
+                data-role="delete-announcement">
+                🗑️
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        `;
+
+        adminAnnouncementList.appendChild(card);
+      });
+    });
+}
+
+
+/* =========================
+   ADMIN – EDIT ANNOUNCEMENT
+   ========================= */
+
+const editAnnouncementModal = document.getElementById("editAnnouncementModal");
+const editAnnouncementForm = document.getElementById("editAnnouncementForm");
+const closeEditAnnouncementModal = document.getElementById("closeEditAnnouncementModal");
+
+let editingAnnouncementId = null;
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".icon-btn.edit");
+  if (!btn || !adminAnnouncementList || !adminAnnouncementList.contains(btn)) return;
+
+  editingAnnouncementId = btn.dataset.id;
+
+  try {
+    const doc = await db.collection("announcements").doc(editingAnnouncementId).get();
+    if (!doc.exists) return;
+
+    const data = doc.data();
+
+    editAnnouncementTitle.value = data.title || "";
+    editAnnouncementBody.value = data.body || "";
+    editAnnouncementPinned.checked = !!data.pinned;
+
+    editAnnouncementModal.classList.remove("hidden");
+  } catch (err) {
+    console.error("Failed to load announcement for editing", err);
+  }
+});
+
+closeEditAnnouncementModal?.addEventListener("click", () => {
+  editAnnouncementModal.classList.add("hidden");
+  editingAnnouncementId = null;
+});
+
+editAnnouncementForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!editingAnnouncementId) return;
+
+  try {
+    await db.collection("announcements").doc(editingAnnouncementId).update({
+      title: editAnnouncementTitle.value.trim(),
+      body: editAnnouncementBody.value.trim(),
+      pinned: editAnnouncementPinned.checked
+    });
+
+    editAnnouncementModal.classList.add("hidden");
+    editingAnnouncementId = null;
+  } catch (err) {
+    alert("Failed to save changes.");
+    console.error(err);
+  }
+});
+
+
+/* =========================
+   ADMIN – DELETE ANNOUNCEMENT
+   ========================= */
+
+const deleteAnnouncementModal = document.getElementById("deleteAnnouncementModal");
+const confirmDeleteAnnouncementBtn = document.getElementById("confirmDeleteAnnouncementBtn");
+const cancelDeleteAnnouncementBtn = document.getElementById("cancelDeleteAnnouncementBtn");
+
+let deletingAnnouncementId = null;
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-role="delete-announcement"]');
+  if (!btn) return;
+
+  deletingAnnouncementId = btn.dataset.id;
+  deleteAnnouncementModal.classList.remove("hidden");
+});
+
+cancelDeleteAnnouncementBtn?.addEventListener("click", () => {
+  deleteAnnouncementModal.classList.add("hidden");
+  deletingAnnouncementId = null;
+});
+
+confirmDeleteAnnouncementBtn?.addEventListener("click", async () => {
+  if (!deletingAnnouncementId) return;
+
+  try {
+    await db.collection("announcements").doc(deletingAnnouncementId).delete();
+
+    deleteAnnouncementModal.classList.add("hidden");
+    deletingAnnouncementId = null;
+  } catch (err) {
+    alert("Failed to delete announcement.");
+    console.error(err);
+  }
+});
+
+
+/* =========================
+   USER DASHBOARD – RENDER ANNOUNCEMENTS
+   ========================= */
+
+const announcementList = document.getElementById("announcementList");
+
+if (announcementList) {
+  db.collection("announcements")
+    .orderBy("createdAt", "desc")
+    .onSnapshot((snapshot) => {
+
+      announcementList.innerHTML = "";
+
+      if (snapshot.empty) {
+        announcementList.innerHTML =
+          '<p class="dashboard-subtext">No announcements yet.</p>';
+        return;
+      }
+
+      const docs = snapshot.docs.slice().sort((a, b) => {
+        const aPinned = a.data().pinned ? 1 : 0;
+        const bPinned = b.data().pinned ? 1 : 0;
+        return bPinned - aPinned;
+      });
+
+      docs.forEach((doc) => {
+        const announcement = doc.data();
+
+        const card = document.createElement("div");
+        card.className = "announcement-card";
+
+        card.innerHTML = `
+          <p class="announcement-text">${announcement.body}</p>
+          <span class="announcement-date">Posted ${formatAnnouncementDate(announcement.createdAt)}</span>
+        `;
+
+        announcementList.appendChild(card);
+      });
+    });
+}
+
+
+/* =========================
    ADMIN – RENDER EVENTS (READ ONLY)
    ========================= */
 
@@ -363,7 +620,7 @@ let editingEventId = null;
 // Open Edit Modal
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".icon-btn.edit");
-  if (!btn) return;
+  if (!btn || !adminEventList || !adminEventList.contains(btn)) return;
 
   editingEventId = btn.dataset.id;
 
@@ -431,7 +688,7 @@ let archivingEventId = null;
 // Open Archive Modal
 document.addEventListener("click", (e) => {
   const btn = e.target.closest(".icon-btn.archive");
-  if (!btn) return;
+  if (!btn || !adminEventList || !adminEventList.contains(btn)) return;
 
   archivingEventId = btn.dataset.id;
   archiveEventModal.classList.remove("hidden");

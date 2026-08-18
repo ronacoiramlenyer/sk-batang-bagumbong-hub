@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Announcements</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container admin-events">
+
+    <!-- CREATE ANNOUNCEMENT -->
+    <section class="admin-section create-event">
+      <h2>Post New Announcement</h2>
+
+      <form id="createAnnouncementForm" class="admin-form">
+
+        <label>Title</label>
+        <input type="text" id="announcementTitle"
+          placeholder="Barangay Office Advisory" required>
+
+        <label>Message</label>
+        <textarea id="announcementBody"
+          placeholder="Write the announcement details here"
+          rows="5" required></textarea>
+
+        <label class="pinned-checkbox-label">
+          <input type="checkbox" id="announcementPinned">
+          Pin this announcement to the top
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="submit-btn">
+            Post Announcement
+          </button>
+
+          <button type="button"
+            class="submit-btn secondary"
+            onclick="window.location.href='admin.html'">
+            Cancel
+          </button>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

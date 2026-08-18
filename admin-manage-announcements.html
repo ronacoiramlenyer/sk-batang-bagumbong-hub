@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Announcements</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container admin-events">
+
+    <!-- ANNOUNCEMENTS LIST -->
+    <section class="admin-section">
+
+      <div class="section-header">
+        <h2>Existing Announcements</h2>
+      </div>
+
+      <div id="adminAnnouncementList" class="event-list">
+        <!-- Announcements will be rendered here -->
+        <p class="dashboard-subtext">No announcements yet.</p>
+      </div>
+
+    </section>
+
+    <!-- EDIT ANNOUNCEMENT MODAL -->
+    <div id="editAnnouncementModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Edit Announcement</h3>
+
+        <form id="editAnnouncementForm">
+
+          <label>Title</label>
+          <input type="text" id="editAnnouncementTitle" required>
+
+          <label>Message</label>
+          <textarea id="editAnnouncementBody" rows="5" required></textarea>
+
+          <label class="pinned-checkbox-label">
+            <input type="checkbox" id="editAnnouncementPinned">
+            Pin this announcement to the top
+          </label>
+
+          <button type="submit" class="submit-btn">
+            Save Changes
+          </button>
+
+          <span id="closeEditAnnouncementModal" class="back-link">Cancel</span>
+        </form>
+      </div>
+    </div>
+
+    <!-- DELETE ANNOUNCEMENT MODAL -->
+    <div id="deleteAnnouncementModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Delete Announcement</h3>
+        <p>
+          This will permanently remove the announcement.<br>
+          This cannot be undone.
+        </p>
+
+        <button id="confirmDeleteAnnouncementBtn" class="submit-btn">
+          Delete Announcement
+        </button>
+
+        <span id="cancelDeleteAnnouncementBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="admin-nav">
+      <button type="button" class="action-card secondary"
+        onclick="window.location.href='admin.html'">
+        ← Back to Admin Panel
+      </button>
+    </div>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

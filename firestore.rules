@@ -66,8 +66,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------------------------
+    // announcements/{announcementId}
+    // ---------------------------
+    match /announcements/{announcementId} {
+      // Any signed-in user can read announcements.
+      allow read: if isSignedIn();
+      // Only admins can post, edit, or delete announcements.
+      allow create, update, delete: if isAdmin();
+    }
+
     // Default deny for anything not explicitly matched above
-    // (announcements, idApplications, certificates, conversations, etc.
+    // (idApplications, certificates, conversations, etc.
     // will need their own rules blocks as those features are built).
     match /{document=**} {
       allow read, write: if false;
