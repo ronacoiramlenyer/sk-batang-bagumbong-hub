@@ -13,6 +13,11 @@
 
     <!-- HEADER -->
     <div class="dashboard-header">
+      <button id="messagesHeaderBtn" type="button" class="header-icon-btn">
+        💬
+        <span id="messagesHeaderBadge" class="header-icon-badge hidden"></span>
+      </button>
+
       <div class="avatar">
         <div class="avatar-circle">
           <span id="avatarInitials">?</span>
@@ -35,23 +40,10 @@
 
     </div>
 
-    <!-- MESSAGES -->
-    <div class="dashboard-section">
-      <h2 class="section-title">Messages</h2>
-
-      <div id="userMessagesStatus" class="event-list">
-        <button type="button" class="action-card small" onclick="window.location.href='messages.html'">
-          Open Messages
-        </button>
-      </div>
-    </div>
-
     <!-- SK BARANGAY ID -->
     <div class="dashboard-section">
-      <h2 class="section-title">SK Barangay ID</h2>
-
-      <div id="idApplicationStatus" class="event-list">
-        <p class="dashboard-subtext">Loading…</p>
+      <div id="idApplicationStatus" class="status-row">
+        <span class="dashboard-subtext">Loading…</span>
       </div>
     </div>
 

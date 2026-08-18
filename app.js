@@ -2106,14 +2106,14 @@ if (chatThread) {
 
 
 /* =========================
-   USER DASHBOARD – MESSAGES UNREAD INDICATOR
+   USER DASHBOARD – MESSAGES HEADER ICON
    ========================= */
 
-const userMessagesStatus = document.getElementById("userMessagesStatus");
+const messagesHeaderBtn = document.getElementById("messagesHeaderBtn");
+const messagesHeaderBadge = document.getElementById("messagesHeaderBadge");
 
-if (userMessagesStatus) {
-  userMessagesStatus.classList.add("clickable");
-  userMessagesStatus.addEventListener("click", () => {
+if (messagesHeaderBtn) {
+  messagesHeaderBtn.addEventListener("click", () => {
     window.location.href = "messages.html";
   });
 
@@ -2123,11 +2123,12 @@ if (userMessagesStatus) {
     db.collection("conversations").doc(user.uid)
       .onSnapshot((doc) => {
         const unread = doc.exists && doc.data().unreadByUser;
-        userMessagesStatus.innerHTML = `
-          <span class="quick-access-icon">💬</span>
-          <span class="quick-access-label">Messages</span>
-          ${unread ? '<span class="quick-access-badge">New</span>' : ""}
-        `;
+        if (unread) {
+          messagesHeaderBadge.textContent = "";
+          messagesHeaderBadge.classList.remove("hidden");
+        } else {
+          messagesHeaderBadge.classList.add("hidden");
+        }
       }, (err) => {
         console.error("Failed to load message status:", err);
       });
@@ -2160,10 +2161,11 @@ if (idApplicationStatusEl) {
       }
 
       idApplicationStatusEl.innerHTML = `
-        <span class="quick-access-icon">🪪</span>
-        <span class="quick-access-label">SK ID</span>
-        <span class="quick-access-badge">${status.toUpperCase()}</span>
-        ${data.idNumber ? `<span class="dashboard-subtext">${data.idNumber}</span>` : ""}
+        <div class="status-row-left">
+          <span class="quick-access-icon">🪪</span>
+          <span class="quick-access-label">SK ID: ${status.toUpperCase()}</span>
+          ${data.idNumber ? `<span class="dashboard-subtext">${data.idNumber}</span>` : ""}
+        </div>
         ${actionHtml}
       `;
     } catch (err) {
