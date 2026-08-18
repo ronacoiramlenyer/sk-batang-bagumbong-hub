@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin – Events</title>
+  <title>Admin – Certificate Template</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -11,47 +11,34 @@
 
   <div class="app-container admin-events">
 
+    <section class="admin-section">
+      <h2>Certificate Template</h2>
+      <p class="dashboard-subtext">
+        Upload the background design used for generated certificates.
+        Uploading a new image replaces the current template immediately —
+        no code changes needed.
+      </p>
 
+      <img id="templatePreview" class="template-preview hidden" alt="Current certificate template">
+      <p id="noTemplateText" class="dashboard-subtext">No template uploaded yet.</p>
 
-    <!-- CREATE EVENT -->
-    <section class="admin-section create-event">
-      <h2>Create New Event</h2>
-
-      <form id="createEventForm" class="admin-form">
-
-        <label>Event Title</label>
-        <input type="text" id="eventTitle" placeholder="Youth Leadership Summit" required>
-
-        <label>Description</label>
-        <textarea id="eventDescription"
-        placeholder="Describe the event details, objectives, and important notes"
-        rows="4"></textarea>
-
-        <label>Date</label>
-        <input type="date" id="eventDate" required>
-
-        <label>Time</label>
-        <input type="time" id="eventTime" required>
-
-        <label>Location</label>
-        <input type="text" id="eventLocation" placeholder="Barangay Hall / Covered Court" required>
+      <form id="templateUploadForm" class="admin-form">
+        <label>Template Image (PNG or JPG)</label>
+        <input type="file" id="templateFile" accept="image/png, image/jpeg" required>
 
         <div class="form-actions">
           <button type="submit" class="submit-btn">
-            Create Event
+            Upload Template
           </button>
 
           <button type="button"
             class="submit-btn secondary"
             onclick="window.location.href='admin.html'">
-            Cancel
+            Back
           </button>
         </div>
-
-
       </form>
     </section>
-
 
     <!-- LOGOUT -->
     <button id="logoutBtn" class="submit-btn logout">

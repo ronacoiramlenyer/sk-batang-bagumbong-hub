@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // The certificate template — any signed-in user can read it (needed to
+    // generate/download their own certificate client-side), only admins
+    // can upload a replacement.
+    match /certificateTemplate/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Default deny for anything else (ID application photos, etc. will
+    // get their own rules block when that feature is built).
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

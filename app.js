@@ -10,6 +10,7 @@ firebase.initializeApp({
 
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 /* =========================
    PAGE DETECTION
@@ -199,6 +200,148 @@ if (createEventForm) {
       alert(err.message);
     }
   });
+}
+
+
+/* =========================
+   CERTIFICATE TEMPLATE (ADMIN UPLOAD)
+   ========================= */
+
+// Fixed Storage path — uploading a new file here replaces the template
+// used everywhere certificates are generated. No code change needed
+// to swap designs later.
+const CERT_TEMPLATE_PATH = "certificateTemplate/template.png";
+
+const templatePreview = document.getElementById("templatePreview");
+const noTemplateText = document.getElementById("noTemplateText");
+const templateUploadForm = document.getElementById("templateUploadForm");
+const templateFileInput = document.getElementById("templateFile");
+
+async function loadTemplatePreview() {
+  if (!templatePreview) return;
+
+  try {
+    const url = await storage.ref(CERT_TEMPLATE_PATH).getDownloadURL();
+    templatePreview.src = url;
+    templatePreview.classList.remove("hidden");
+    noTemplateText?.classList.add("hidden");
+  } catch (err) {
+    templatePreview.classList.add("hidden");
+    noTemplateText?.classList.remove("hidden");
+  }
+}
+
+if (templatePreview) {
+  loadTemplatePreview();
+}
+
+templateUploadForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const file = templateFileInput.files[0];
+  if (!file) {
+    alert("Please choose an image file.");
+    return;
+  }
+
+  const submitBtn = templateUploadForm.querySelector("button[type='submit']");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Uploading…";
+
+  try {
+    await storage.ref(CERT_TEMPLATE_PATH).put(file);
+    await loadTemplatePreview();
+    alert("Template uploaded. This is now used for every generated certificate.");
+    templateUploadForm.reset();
+  } catch (err) {
+    console.error("Template upload failed:", err);
+    alert("Upload failed: " + err.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Upload Template";
+  }
+});
+
+
+/* =========================
+   CERTIFICATE GENERATION (CANVAS OVERLAY)
+   ========================= */
+
+// Text placement, expressed as a fraction of the template's width/height
+// so it scales with whatever image size is uploaded. If a new template
+// changes where the blank areas are, these are the only values to adjust.
+const CERT_TEXT_CONFIG = {
+  name:  { xPct: 0.5, yPct: 0.45, fontPct: 0.045, weight: "bold",   color: "#1c1c1c" },
+  event: { xPct: 0.5, yPct: 0.55, fontPct: 0.026, weight: "normal", color: "#333333" },
+  date:  { xPct: 0.5, yPct: 0.62, fontPct: 0.018, weight: "normal", color: "#555555" }
+};
+
+function loadImageFromUrl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function getCertificateTemplateImage() {
+  const downloadUrl = await storage.ref(CERT_TEMPLATE_PATH).getDownloadURL();
+  // Fetch as a blob and load from a local object URL — avoids canvas
+  // "tainted" issues that can come from drawing a cross-origin image directly.
+  const response = await fetch(downloadUrl);
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  try {
+    const img = await loadImageFromUrl(blobUrl);
+    return img;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+async function generateCertificateCanvas({ fullName, eventTitle, eventDate }) {
+  const img = await getCertificateTemplateImage();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+
+  function drawLine(text, cfg) {
+    const fontSize = Math.round(cfg.fontPct * canvas.width);
+    ctx.font = `${cfg.weight} ${fontSize}px system-ui, sans-serif`;
+    ctx.fillStyle = cfg.color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, cfg.xPct * canvas.width, cfg.yPct * canvas.height);
+  }
+
+  drawLine(fullName || "Participant", CERT_TEXT_CONFIG.name);
+  drawLine(eventTitle || "", CERT_TEXT_CONFIG.event);
+  drawLine(eventDate ? `Given on ${eventDate}` : "", CERT_TEXT_CONFIG.date);
+
+  return canvas;
+}
+
+function downloadCanvasAsPng(canvas, filename) {
+  canvas.toBlob((blob) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+  }, "image/png");
+}
+
+function safeFilenamePart(text) {
+  return (text || "certificate").trim().replace(/\s+/g, "_").replace(/[^\w-]/g, "");
 }
 
 
@@ -732,16 +875,19 @@ const registrantsList = document.getElementById("registrantsList");
 const registrantsEventTitle = document.getElementById("registrantsEventTitle");
 const closeRegistrantsModal = document.getElementById("closeRegistrantsModal");
 const printRegistrantsBtn = document.getElementById("printRegistrantsBtn");
+const generateAllCertificatesBtn = document.getElementById("generateAllCertificatesBtn");
 
 let activeRegistrantsEventId = null;
+let activeRegistrantsEventData = null;
 let registrantsUnsubscribe = null;
 
 // Open modal + live-listen to registrants for this event
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".icon-btn.registrants");
   if (!btn) return;
 
   activeRegistrantsEventId = btn.dataset.id;
+  activeRegistrantsEventData = null;
 
   if (registrantsEventTitle) {
     registrantsEventTitle.textContent = btn.dataset.title || "";
@@ -750,6 +896,14 @@ document.addEventListener("click", (e) => {
     registrantsList.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
   }
   registrantsModal?.classList.remove("hidden");
+
+  // Fetch the full event doc once (need date + title for certificates)
+  try {
+    const eventDoc = await db.collection("events").doc(activeRegistrantsEventId).get();
+    activeRegistrantsEventData = eventDoc.exists ? eventDoc.data() : null;
+  } catch (err) {
+    console.error("Failed to load event details:", err);
+  }
 
   if (registrantsUnsubscribe) registrantsUnsubscribe();
 
@@ -775,13 +929,23 @@ document.addEventListener("click", (e) => {
             <strong>${reg.fullName || "Unknown"}</strong>
             <span class="event-meta">${reg.email || ""}</span>
           </div>
-          <label class="attendance-toggle">
-            <input type="checkbox"
-              class="attendance-checkbox"
-              data-id="${doc.id}"
-              ${reg.attended ? "checked" : ""}>
-            Attended
-          </label>
+          <div class="registrant-actions">
+            <label class="attendance-toggle">
+              <input type="checkbox"
+                class="attendance-checkbox"
+                data-id="${doc.id}"
+                ${reg.attended ? "checked" : ""}>
+              Attended
+            </label>
+            <button type="button"
+              class="cert-btn"
+              data-role="generate-certificate"
+              data-fullname="${reg.fullName || ""}"
+              ${reg.attended ? "" : "disabled"}
+              title="${reg.attended ? "Generate certificate" : "Mark attended first"}">
+              🎓 Certificate
+            </button>
+          </div>
         `;
 
         registrantsList.appendChild(row);
@@ -803,6 +967,7 @@ closeRegistrantsModal?.addEventListener("click", () => {
     registrantsUnsubscribe = null;
   }
   activeRegistrantsEventId = null;
+  activeRegistrantsEventData = null;
 });
 
 // Toggle attendance
@@ -830,6 +995,85 @@ document.addEventListener("change", async (e) => {
 // Print registrant list
 printRegistrantsBtn?.addEventListener("click", () => {
   window.print();
+});
+
+// Generate a single certificate
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="generate-certificate"]');
+  if (!btn || btn.disabled) return;
+  if (!activeRegistrantsEventData) {
+    alert("Event details aren't loaded yet — try again in a moment.");
+    return;
+  }
+
+  const fullName = btn.dataset.fullname;
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "Generating…";
+
+  try {
+    const canvas = await generateCertificateCanvas({
+      fullName,
+      eventTitle: activeRegistrantsEventData.title,
+      eventDate: activeRegistrantsEventData.date
+    });
+    downloadCanvasAsPng(canvas, `Certificate-${safeFilenamePart(fullName)}.png`);
+  } catch (err) {
+    console.error("Certificate generation failed:", err);
+    alert("Couldn't generate the certificate. Has a template been uploaded yet? (Admin Panel → Certificates)");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+});
+
+// Bulk-generate certificates for every attended registrant of this event
+generateAllCertificatesBtn?.addEventListener("click", async () => {
+  if (!activeRegistrantsEventId || !activeRegistrantsEventData) {
+    alert("Event details aren't loaded yet — try again in a moment.");
+    return;
+  }
+
+  let snap;
+  try {
+    snap = await db.collection("registrations")
+      .where("eventId", "==", activeRegistrantsEventId)
+      .where("attended", "==", true)
+      .get();
+  } catch (err) {
+    console.error("Failed to load attended registrants:", err);
+    alert("Couldn't load the attended registrant list.");
+    return;
+  }
+
+  if (snap.empty) {
+    alert("No attended registrants yet — mark attendance first.");
+    return;
+  }
+
+  generateAllCertificatesBtn.disabled = true;
+  generateAllCertificatesBtn.textContent = `Generating 0/${snap.docs.length}…`;
+
+  try {
+    for (let i = 0; i < snap.docs.length; i++) {
+      const reg = snap.docs[i].data();
+      const canvas = await generateCertificateCanvas({
+        fullName: reg.fullName,
+        eventTitle: activeRegistrantsEventData.title,
+        eventDate: activeRegistrantsEventData.date
+      });
+      downloadCanvasAsPng(canvas, `Certificate-${safeFilenamePart(reg.fullName)}.png`);
+      generateAllCertificatesBtn.textContent = `Generating ${i + 1}/${snap.docs.length}…`;
+      // Small stagger so the browser doesn't block multiple rapid downloads
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  } catch (err) {
+    console.error("Bulk certificate generation failed:", err);
+    alert("Something went wrong partway through. Check the browser console — some certificates may not have generated. Has a template been uploaded yet?");
+  } finally {
+    generateAllCertificatesBtn.disabled = false;
+    generateAllCertificatesBtn.textContent = "Generate All Certificates";
+  }
 });
 
 
@@ -936,6 +1180,94 @@ document.addEventListener("click", async (e) => {
     alert("Could not register. You may already be registered, or something went wrong.");
     btn.disabled = false;
     btn.textContent = "Join Event";
+  }
+});
+
+
+/* =========================
+   USER DASHBOARD – MY CERTIFICATES
+   ========================= */
+
+const myCertificatesList = document.getElementById("myCertificatesList");
+
+if (myCertificatesList) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    let snap;
+    try {
+      snap = await db.collection("registrations")
+        .where("userId", "==", user.uid)
+        .where("attended", "==", true)
+        .get();
+    } catch (err) {
+      console.error("Failed to load certificates:", err);
+      myCertificatesList.innerHTML =
+        '<p class="dashboard-subtext">Couldn\'t load certificates.</p>';
+      return;
+    }
+
+    if (snap.empty) {
+      myCertificatesList.innerHTML =
+        '<p class="dashboard-subtext">No certificates yet.</p>';
+      return;
+    }
+
+    myCertificatesList.innerHTML = "";
+
+    for (const doc of snap.docs) {
+      const reg = doc.data();
+
+      let event = { title: "Event", date: "" };
+      try {
+        const eventDoc = await db.collection("events").doc(reg.eventId).get();
+        if (eventDoc.exists) event = eventDoc.data();
+      } catch (err) {
+        console.error("Failed to load event for certificate:", err);
+      }
+
+      const card = document.createElement("div");
+      card.className = "event-card";
+      card.innerHTML = `
+        <h3>${event.title}</h3>
+        <p class="event-meta">📅 ${event.date || ""}</p>
+        <button type="button"
+          class="action-card small"
+          data-role="download-certificate"
+          data-fullname="${reg.fullName || ""}"
+          data-eventtitle="${event.title || ""}"
+          data-eventdate="${event.date || ""}">
+          Download Certificate
+        </button>
+      `;
+
+      myCertificatesList.appendChild(card);
+    }
+  });
+}
+
+// Download a certificate from the user dashboard
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="download-certificate"]');
+  if (!btn || btn.disabled) return;
+
+  const fullName = btn.dataset.fullname;
+  const eventTitle = btn.dataset.eventtitle;
+  const eventDate = btn.dataset.eventdate;
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generating…";
+
+  try {
+    const canvas = await generateCertificateCanvas({ fullName, eventTitle, eventDate });
+    downloadCanvasAsPng(canvas, `Certificate-${safeFilenamePart(fullName)}.png`);
+  } catch (err) {
+    console.error("Certificate download failed:", err);
+    alert("The certificate template isn't ready yet. Please check back later.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 });
 
