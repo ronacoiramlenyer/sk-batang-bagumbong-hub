@@ -21,7 +21,7 @@
 
       <h1 id="welcomeName">Welcome!</h1>
       <p class="dashboard-subtext">
-        Your SK Barangay ID and certificates
+        Your account details, SK Barangay ID, and certificates
       </p>
     </div>
 
@@ -46,29 +46,14 @@
     <!-- PROFILE DETAILS -->
     <div class="dashboard-section">
       <h2 class="section-title">Profile Details</h2>
+      <p class="dashboard-subtext">
+        These are locked for your protection. To change any of them,
+        submit a request with proof (a valid ID or recent photo) — the
+        SK office reviews it before anything changes.
+      </p>
 
-      <form id="profileDetailsForm" class="admin-form">
-        <label>Full Name</label>
-        <input id="pdFullName" required>
-
-        <label>Birthdate</label>
-        <input id="pdBirthdate" type="date" required>
-
-        <label>Contact Number</label>
-        <input id="pdContactNumber" type="tel" required>
-
-        <div id="profileDetailsError" class="form-error hidden"></div>
-
-        <button type="submit" id="profileDetailsSubmitBtn" class="submit-btn">
-          Save Changes
-        </button>
-      </form>
-
-      <div class="dashboard-section" style="margin-top:18px;">
-        <h2 class="section-title" style="font-size:13px;">Address</h2>
-        <div id="addressSection">
-          <p class="dashboard-subtext">Loading…</p>
-        </div>
+      <div id="profileDetailsSection">
+        <p class="dashboard-subtext">Loading…</p>
       </div>
     </div>
 

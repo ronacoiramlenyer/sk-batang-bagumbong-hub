@@ -710,6 +710,41 @@ function safeFilenamePart(text) {
   return (text || "certificate").trim().replace(/\s+/g, "_").replace(/[^\w-]/g, "");
 }
 
+/* =========================
+   CSV EXPORT
+   ========================= */
+
+function csvCellDate(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "";
+  return timestamp.toDate().toLocaleString();
+}
+
+function downloadCsv(filename, headers, rows) {
+  const escapeCell = (val) => {
+    const str = (val === undefined || val === null) ? "" : String(val);
+    if (/[",\n]/.test(str)) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  };
+
+  const lines = [headers.map(escapeCell).join(",")];
+  rows.forEach((row) => {
+    lines.push(row.map(escapeCell).join(","));
+  });
+
+  // Leading BOM so Excel opens UTF-8 CSVs correctly instead of mangling accents.
+  const csvContent = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
 
 /* =========================
    ID CARD GENERATION (TEMPLATE + PHOTO + TEXT OVERLAY)
@@ -1408,9 +1443,11 @@ const registrantsEventTitle = document.getElementById("registrantsEventTitle");
 const closeRegistrantsModal = document.getElementById("closeRegistrantsModal");
 const printRegistrantsBtn = document.getElementById("printRegistrantsBtn");
 const generateAllCertificatesBtn = document.getElementById("generateAllCertificatesBtn");
+const exportRegistrantsBtn = document.getElementById("exportRegistrantsBtn");
 
 let activeRegistrantsEventId = null;
 let activeRegistrantsEventData = null;
+let activeRegistrantsData = [];
 let registrantsUnsubscribe = null;
 
 // Open modal + live-listen to registrants for this event
@@ -1444,6 +1481,8 @@ document.addEventListener("click", async (e) => {
     .onSnapshot((snapshot) => {
       if (!registrantsList) return;
       registrantsList.innerHTML = "";
+
+      activeRegistrantsData = snapshot.docs.map((d) => d.data());
 
       if (snapshot.empty) {
         registrantsList.innerHTML =
@@ -1527,6 +1566,30 @@ document.addEventListener("change", async (e) => {
 // Print registrant list
 printRegistrantsBtn?.addEventListener("click", () => {
   window.print();
+});
+
+// Export registrant list to CSV
+exportRegistrantsBtn?.addEventListener("click", () => {
+  if (activeRegistrantsData.length === 0) {
+    alert("No registrants to export.");
+    return;
+  }
+
+  const eventTitle = activeRegistrantsEventData?.title || "event";
+
+  const rows = activeRegistrantsData.map((reg) => [
+    reg.fullName || "",
+    reg.email || "",
+    reg.attended ? "Yes" : "No",
+    csvCellDate(reg.registeredAt),
+    reg.attended ? csvCellDate(reg.checkedInAt) : ""
+  ]);
+
+  downloadCsv(
+    `Registrants-${safeFilenamePart(eventTitle)}.csv`,
+    ["Full Name", "Email", "Attended", "Registered At", "Checked In At"],
+    rows
+  );
 });
 
 // Generate a single certificate
@@ -1663,7 +1726,7 @@ if (statPendingApplicants || statApprovedApplicants) {
 }
 
 if (statUnreadMessages) {
-  db.collection("conversations")
+  db.collection("threads")
     .where("unreadByAdmin", "==", true)
     .onSnapshot((snapshot) => {
       statUnreadMessages.textContent = snapshot.size;
@@ -1678,7 +1741,7 @@ if (statUnreadMessages) {
 const adminUnreadBadge = document.getElementById("adminUnreadBadge");
 
 if (adminUnreadBadge) {
-  db.collection("conversations")
+  db.collection("threads")
     .where("unreadByAdmin", "==", true)
     .onSnapshot((snapshot) => {
       if (snapshot.size > 0) {
@@ -1694,13 +1757,13 @@ if (adminUnreadBadge) {
 
 
 /* =========================
-   ADMIN – PENDING ADDRESS REQUEST BADGE
+   ADMIN – PENDING PROFILE CHANGE REQUEST BADGE
    ========================= */
 
 const adminAddressRequestBadge = document.getElementById("adminAddressRequestBadge");
 
 if (adminAddressRequestBadge) {
-  db.collection("addressChangeRequests")
+  db.collection("profileChangeRequests")
     .where("status", "==", "pending")
     .onSnapshot((snapshot) => {
       if (snapshot.size > 0) {
@@ -1710,7 +1773,7 @@ if (adminAddressRequestBadge) {
         adminAddressRequestBadge.classList.add("hidden");
       }
     }, (err) => {
-      console.error("Failed to load pending address request count:", err);
+      console.error("Failed to load pending profile change request count:", err);
     });
 }
 
@@ -1723,7 +1786,7 @@ const usersList = document.getElementById("usersList");
 
 if (usersList) {
   let cachedUsers = [];
-  let pendingAddressRequestsByUser = new Map();
+  let pendingProfileRequestsByUser = new Map();
 
   function renderUsersList() {
     if (cachedUsers.length === 0) {
@@ -1735,8 +1798,9 @@ if (usersList) {
 
     cachedUsers.forEach((doc) => {
       const u = doc.data();
-      const pendingRequest = pendingAddressRequestsByUser.get(doc.id);
+      const pendingRequest = pendingProfileRequestsByUser.get(doc.id);
       const idStatus = u.idStatus || "pending";
+      const requested = pendingRequest ? (pendingRequest.requested || {}) : null;
 
       const card = document.createElement("div");
       card.className = "event-card admin-card collapsible-card";
@@ -1749,7 +1813,7 @@ if (usersList) {
             <span class="status-badge ${u.role === "admin" ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
               ${u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
             </span>
-            ${pendingRequest ? '<span class="status-badge status-archived">ADDRESS REQUEST</span>' : ""}
+            ${pendingRequest ? '<span class="status-badge status-archived">CHANGE REQUEST</span>' : ""}
           </div>
           <span class="collapsible-chevron">▾</span>
         </div>
@@ -1767,22 +1831,28 @@ if (usersList) {
           ` : ""}
 
           ${pendingRequest ? `
-            <div class="status-row" style="margin-bottom:10px;">
-              <div class="status-row-left">
-                <span class="quick-access-icon" style="font-size:16px;">📍</span>
-                <span class="quick-access-label">New: ${pendingRequest.requestedAddress}</span>
-              </div>
-            </div>
+            <p class="event-meta"><strong>Requested changes:</strong></p>
+            ${requested.fullName && requested.fullName !== u.fullName ? `<p class="dashboard-subtext">Name: ${u.fullName || "—"} → <strong>${requested.fullName}</strong></p>` : ""}
+            ${requested.birthdate && requested.birthdate !== u.birthdate ? `<p class="dashboard-subtext">Birthdate: ${u.birthdate || "—"} → <strong>${requested.birthdate}</strong></p>` : ""}
+            ${requested.contactNumber && requested.contactNumber !== u.contactNumber ? `<p class="dashboard-subtext">Contact: ${u.contactNumber || "—"} → <strong>${requested.contactNumber}</strong></p>` : ""}
+            ${requested.address && requested.address !== u.address ? `<p class="dashboard-subtext">Address: ${u.address || "—"} → <strong>${requested.address}</strong></p>` : ""}
+
+            ${pendingRequest.proofPhotoData ? `
+              <p class="event-meta" style="margin-top:8px;">Proof submitted:</p>
+              <img src="${pendingRequest.proofPhotoData}" alt="Proof for ${u.fullName || ""}"
+                style="width:100%; height:auto; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
+            ` : ""}
+
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
-                data-role="approve-address" data-id="${doc.id}"
-                title="Approve Address Change">
+                data-role="approve-profile-change" data-id="${doc.id}"
+                title="Approve Changes">
                 ✅
                 <span>Approve</span>
               </button>
               <button class="icon-btn archive"
-                data-role="reject-address" data-id="${doc.id}"
-                title="Reject Address Change">
+                data-role="reject-profile-change" data-id="${doc.id}"
+                title="Reject Changes">
                 ❌
                 <span>Reject</span>
               </button>
@@ -1805,52 +1875,86 @@ if (usersList) {
       usersList.innerHTML = '<p class="dashboard-subtext">Failed to load users.</p>';
     });
 
-  db.collection("addressChangeRequests")
+  db.collection("profileChangeRequests")
     .where("status", "==", "pending")
     .onSnapshot((snapshot) => {
-      pendingAddressRequestsByUser = new Map(
+      pendingProfileRequestsByUser = new Map(
         snapshot.docs.map((d) => [d.id, d.data()])
       );
       renderUsersList();
     }, (err) => {
-      console.error("Failed to load address requests:", err);
+      console.error("Failed to load profile change requests:", err);
     });
+
+  const exportUsersBtn = document.getElementById("exportUsersBtn");
+  exportUsersBtn?.addEventListener("click", () => {
+    if (cachedUsers.length === 0) {
+      alert("No users to export.");
+      return;
+    }
+
+    const rows = cachedUsers.map((doc) => {
+      const u = doc.data();
+      return [
+        u.fullName || "",
+        u.email || "",
+        u.role || "user",
+        u.address || "",
+        u.birthdate || "",
+        u.contactNumber || "",
+        u.role === "admin" ? "" : (u.idStatus || "pending"),
+        u.idNumber || "",
+        csvCellDate(u.createdAt)
+      ];
+    });
+
+    downloadCsv(
+      `Users-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Full Name", "Email", "Role", "Address", "Birthdate", "Contact Number", "ID Status", "ID Number", "Created At"],
+      rows
+    );
+  });
 }
 
-// Approve / Reject an address change request
+// Approve / Reject a profile change request
 document.addEventListener("click", async (e) => {
-  const btn = e.target.closest('[data-role="approve-address"], [data-role="reject-address"]');
+  const btn = e.target.closest('[data-role="approve-profile-change"], [data-role="reject-profile-change"]');
   if (!btn) return;
 
   const userId = btn.dataset.id;
-  const isApprove = btn.dataset.role === "approve-address";
+  const isApprove = btn.dataset.role === "approve-profile-change";
   const admin = auth.currentUser;
 
-  if (!isApprove && !confirm("Reject this address change request?")) return;
+  if (!isApprove && !confirm("Reject this profile change request?")) return;
 
   try {
     if (isApprove) {
-      const requestDoc = await db.collection("addressChangeRequests").doc(userId).get();
+      const requestDoc = await db.collection("profileChangeRequests").doc(userId).get();
       if (!requestDoc.exists) return;
-      const requestedAddress = requestDoc.data().requestedAddress;
+      const requested = requestDoc.data().requested || {};
 
       const batch = db.batch();
-      batch.update(db.collection("users").doc(userId), { address: requestedAddress });
-      batch.update(db.collection("addressChangeRequests").doc(userId), {
+      batch.update(db.collection("users").doc(userId), {
+        fullName: requested.fullName,
+        birthdate: requested.birthdate,
+        contactNumber: requested.contactNumber,
+        address: requested.address
+      });
+      batch.update(db.collection("profileChangeRequests").doc(userId), {
         status: "approved",
         reviewedBy: admin.uid,
         reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       await batch.commit();
     } else {
-      await db.collection("addressChangeRequests").doc(userId).update({
+      await db.collection("profileChangeRequests").doc(userId).update({
         status: "rejected",
         reviewedBy: admin.uid,
         reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }
   } catch (err) {
-    console.error("Failed to update address request:", err);
+    console.error("Failed to update profile change request:", err);
     alert("Failed to update the request.");
   }
 });
@@ -1868,11 +1972,11 @@ const adminChatSendForm = document.getElementById("adminChatSendForm");
 const adminChatMessageInput = document.getElementById("adminChatMessageInput");
 const closeChatThreadModal = document.getElementById("closeChatThreadModal");
 
-let activeConversationUserId = null;
-let activeConversationUnsubscribe = null;
+let activeThreadId = null;
+let activeThreadUnsubscribe = null;
 
 if (conversationsList) {
-  db.collection("conversations")
+  db.collection("threads")
     .orderBy("lastMessageAt", "desc")
     .onSnapshot((snapshot) => {
 
@@ -1885,8 +1989,8 @@ if (conversationsList) {
       }
 
       snapshot.forEach((doc) => {
-        const convo = doc.data();
-        const name = convo.userFullName || "Unknown";
+        const thread = doc.data();
+        const name = thread.userFullName || "Unknown";
         const initials = name
           .split(/\s+/)
           .map(w => w[0])
@@ -1899,15 +2003,17 @@ if (conversationsList) {
         row.setAttribute("data-role", "open-conversation");
         row.setAttribute("data-id", doc.id);
         row.setAttribute("data-name", name);
+        row.setAttribute("data-subject", thread.subject || "Conversation");
 
         row.innerHTML = `
           <div class="convo-avatar">${initials || "?"}</div>
           <div class="convo-body">
             <div class="convo-top-line">
-              <span class="convo-name">${name}</span>
-              ${convo.unreadByAdmin ? '<span class="convo-dot"></span>' : ""}
+              <span class="convo-name">${thread.subject || "Conversation"}</span>
+              <span class="convo-time">${formatRelativeTime(thread.lastMessageAt)}</span>
+              ${thread.unreadByAdmin ? '<span class="convo-dot"></span>' : ""}
             </div>
-            <p class="convo-preview">${convo.lastMessageText || ""}</p>
+            <p class="convo-preview">${name} · ${thread.lastMessageText || "No messages yet"}</p>
           </div>
         `;
 
@@ -1920,26 +2026,28 @@ if (conversationsList) {
     });
 }
 
-// Open a conversation thread
+// Open a thread
 document.addEventListener("click", (e) => {
   const card = e.target.closest('[data-role="open-conversation"]');
   if (!card) return;
 
-  activeConversationUserId = card.dataset.id;
-  chatThreadUserName.textContent = card.dataset.name || "Conversation";
+  activeThreadId = card.dataset.id;
+  const subject = card.dataset.subject || "Conversation";
+  const name = card.dataset.name || "Unknown";
+  chatThreadUserName.textContent = `${subject} — from ${name}`;
   adminChatThread.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
   chatThreadModal?.classList.remove("hidden");
 
-  const conversationRef = db.collection("conversations").doc(activeConversationUserId);
+  const threadRef = db.collection("threads").doc(activeThreadId);
 
   // Mark as read by admin on open
-  conversationRef.set({ unreadByAdmin: false }, { merge: true }).catch((err) => {
-    console.error("Failed to mark conversation read:", err);
+  threadRef.update({ unreadByAdmin: false }).catch((err) => {
+    console.error("Failed to mark thread read:", err);
   });
 
-  if (activeConversationUnsubscribe) activeConversationUnsubscribe();
+  if (activeThreadUnsubscribe) activeThreadUnsubscribe();
 
-  activeConversationUnsubscribe = conversationRef.collection("messages")
+  activeThreadUnsubscribe = threadRef.collection("messages")
     .orderBy("sentAt", "asc")
     .onSnapshot((snapshot) => {
       const messages = snapshot.docs.map((d) => d.data());
@@ -1952,16 +2060,16 @@ document.addEventListener("click", (e) => {
 
 closeChatThreadModal?.addEventListener("click", () => {
   chatThreadModal?.classList.add("hidden");
-  if (activeConversationUnsubscribe) {
-    activeConversationUnsubscribe();
-    activeConversationUnsubscribe = null;
+  if (activeThreadUnsubscribe) {
+    activeThreadUnsubscribe();
+    activeThreadUnsubscribe = null;
   }
-  activeConversationUserId = null;
+  activeThreadId = null;
 });
 
 adminChatSendForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!activeConversationUserId) return;
+  if (!activeThreadId) return;
 
   const text = adminChatMessageInput.value.trim();
   if (!text) return;
@@ -1971,21 +2079,30 @@ adminChatSendForm?.addEventListener("submit", async (e) => {
   sendBtn.disabled = true;
 
   try {
-    const conversationRef = db.collection("conversations").doc(activeConversationUserId);
+    const threadRef = db.collection("threads").doc(activeThreadId);
 
-    await conversationRef.collection("messages").add({
+    let adminFullName = "SK Office";
+    try {
+      const adminDoc = await db.collection("users").doc(admin.uid).get();
+      adminFullName = adminDoc.exists ? (adminDoc.data().fullName || "SK Office") : "SK Office";
+    } catch (err) {
+      console.error("Failed to fetch admin name for message:", err);
+    }
+
+    await threadRef.collection("messages").add({
       senderId: admin.uid,
       senderRole: "admin",
+      senderName: adminFullName,
       text,
       sentAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    await conversationRef.set({
+    await threadRef.update({
       lastMessageText: text,
       lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
       unreadByUser: true,
       unreadByAdmin: false
-    }, { merge: true });
+    });
 
     adminChatMessageInput.value = "";
   } catch (err) {
@@ -2300,11 +2417,65 @@ document.addEventListener("click", async (e) => {
 
 /* =========================
    USER – MESSAGES (messages.html)
+   Thread-based: a user can have multiple named conversations, each with
+   its own subject, shown as a list — tapping one opens its messages.
    ========================= */
 
-const chatThread = document.getElementById("chatThread");
-const chatSendForm = document.getElementById("chatSendForm");
-const chatMessageInput = document.getElementById("chatMessageInput");
+const threadsList = document.getElementById("threadsList");
+const newThreadBtn = document.getElementById("newThreadBtn");
+const newThreadModal = document.getElementById("newThreadModal");
+const newThreadForm = document.getElementById("newThreadForm");
+const newThreadSubjectInput = document.getElementById("newThreadSubject");
+const closeNewThreadModal = document.getElementById("closeNewThreadModal");
+
+const userChatThreadModal = document.getElementById("userChatThreadModal");
+const userChatThreadSubject = document.getElementById("userChatThreadSubject");
+const userChatThread = document.getElementById("userChatThread");
+const userChatSendForm = document.getElementById("userChatSendForm");
+const userChatMessageInput = document.getElementById("userChatMessageInput");
+const closeUserChatThreadModal = document.getElementById("closeUserChatThreadModal");
+
+// Clock time for an individual message bubble — just the time if sent
+// today, otherwise a short date + time.
+function formatMessageTime(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "Sending…";
+
+  const date = timestamp.toDate();
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  if (isToday) {
+    return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+
+  const isThisYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: isThisYear ? undefined : "numeric"
+  }) + " " + date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+// Relative time for thread list previews — "5m ago", "Yesterday", etc.
+function formatRelativeTime(timestamp) {
+  if (!timestamp || !timestamp.toDate) return "Just now";
+
+  const date = timestamp.toDate();
+  const now = new Date();
+  const diffMin = Math.floor((now - date) / 60000);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return "Yesterday";
+  if (diffDay < 7) return `${diffDay}d ago`;
+
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function renderMessageBubbles(container, messages, myRole) {
   container.innerHTML = "";
@@ -2315,81 +2486,222 @@ function renderMessageBubbles(container, messages, myRole) {
   }
 
   messages.forEach((msg) => {
-    const bubble = document.createElement("div");
     const isMine = msg.senderRole === myRole;
+    const label = isMine ? "You" : (msg.senderName || (msg.senderRole === "admin" ? "SK Office" : "Unknown"));
+
+    const wrapper = document.createElement("div");
+    wrapper.className = `chat-bubble-wrapper ${isMine ? "chat-bubble-wrapper-mine" : "chat-bubble-wrapper-theirs"}`;
+
+    const nameLabel = document.createElement("span");
+    nameLabel.className = "chat-sender-name";
+    nameLabel.textContent = label;
+
+    const bubble = document.createElement("div");
     bubble.className = `chat-bubble ${isMine ? "chat-bubble-mine" : "chat-bubble-theirs"}`;
     bubble.textContent = msg.text;
-    container.appendChild(bubble);
+
+    const timeLabel = document.createElement("span");
+    timeLabel.className = "chat-timestamp";
+    timeLabel.textContent = formatMessageTime(msg.sentAt);
+
+    wrapper.appendChild(nameLabel);
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(timeLabel);
+    container.appendChild(wrapper);
   });
 
   container.scrollTop = container.scrollHeight;
 }
 
-if (chatThread) {
+let activeUserThreadId = null;
+let activeUserThreadUnsubscribe = null;
+
+function openUserThread(threadId, subject) {
+  activeUserThreadId = threadId;
+  userChatThreadSubject.textContent = subject || "Conversation";
+  userChatThread.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
+  userChatThreadModal?.classList.remove("hidden");
+
+  const threadRef = db.collection("threads").doc(threadId);
+
+  threadRef.update({ unreadByUser: false }).catch((err) => {
+    console.error("Failed to mark thread read:", err);
+  });
+
+  if (activeUserThreadUnsubscribe) activeUserThreadUnsubscribe();
+
+  activeUserThreadUnsubscribe = threadRef.collection("messages")
+    .orderBy("sentAt", "asc")
+    .onSnapshot((snapshot) => {
+      const messages = snapshot.docs.map((d) => d.data());
+      renderMessageBubbles(userChatThread, messages, "user");
+    }, (err) => {
+      console.error("Failed to load thread messages:", err);
+      userChatThread.innerHTML = '<p class="dashboard-subtext">Failed to load messages.</p>';
+    });
+}
+
+if (threadsList) {
   waitForUser().then((user) => {
     if (!user) return;
 
-    const conversationRef = db.collection("conversations").doc(user.uid);
-
-    // Mark as read by the user on open
-    conversationRef.set({ unreadByUser: false }, { merge: true }).catch((err) => {
-      console.error("Failed to mark conversation read:", err);
-    });
-
-    conversationRef.collection("messages")
-      .orderBy("sentAt", "asc")
+    db.collection("threads")
+      .where("userId", "==", user.uid)
       .onSnapshot((snapshot) => {
-        const messages = snapshot.docs.map((d) => d.data());
-        renderMessageBubbles(chatThread, messages, "user");
-      }, (err) => {
-        console.error("Failed to load messages:", err);
-        chatThread.innerHTML = '<p class="dashboard-subtext">Failed to load messages.</p>';
-      });
+        threadsList.innerHTML = "";
 
-    chatSendForm?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const text = chatMessageInput.value.trim();
-      if (!text) return;
-
-      const sendBtn = chatSendForm.querySelector("button[type='submit']");
-      sendBtn.disabled = true;
-
-      try {
-        let userFullName = "";
-        try {
-          const userDoc = await db.collection("users").doc(user.uid).get();
-          userFullName = userDoc.exists ? (userDoc.data().fullName || "") : "";
-        } catch (err) {
-          console.error("Failed to fetch name for conversation meta:", err);
+        if (snapshot.empty) {
+          threadsList.innerHTML = '<p class="dashboard-subtext">No conversations yet.</p>';
+          return;
         }
 
-        await conversationRef.collection("messages").add({
-          senderId: user.uid,
-          senderRole: "user",
-          text,
-          sentAt: firebase.firestore.FieldValue.serverTimestamp()
+        const docs = snapshot.docs.slice().sort((a, b) =>
+          (b.data().lastMessageAt?.toMillis?.() || 0) - (a.data().lastMessageAt?.toMillis?.() || 0)
+        );
+
+        docs.forEach((doc) => {
+          const thread = doc.data();
+
+          const row = document.createElement("div");
+          row.className = "convo-row";
+          row.setAttribute("data-role", "open-user-thread");
+          row.setAttribute("data-id", doc.id);
+          row.setAttribute("data-subject", thread.subject || "Conversation");
+
+          row.innerHTML = `
+            <div class="convo-avatar">💬</div>
+            <div class="convo-body">
+              <div class="convo-top-line">
+                <span class="convo-name">${thread.subject || "Conversation"}</span>
+                <span class="convo-time">${formatRelativeTime(thread.lastMessageAt)}</span>
+                ${thread.unreadByUser ? '<span class="convo-dot"></span>' : ""}
+              </div>
+              <p class="convo-preview">${thread.lastMessageText || "No messages yet"}</p>
+            </div>
+          `;
+
+          threadsList.appendChild(row);
         });
-
-        await conversationRef.set({
-          userId: user.uid,
-          userFullName,
-          lastMessageText: text,
-          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-          unreadByAdmin: true,
-          unreadByUser: false
-        }, { merge: true });
-
-        chatMessageInput.value = "";
-      } catch (err) {
-        console.error("Failed to send message:", err);
-        alert("Couldn't send that message. Please try again.");
-      } finally {
-        sendBtn.disabled = false;
-      }
-    });
+      }, (err) => {
+        console.error("Failed to load threads:", err);
+        threadsList.innerHTML = '<p class="dashboard-subtext">Failed to load conversations.</p>';
+      });
   });
 }
+
+threadsList?.addEventListener("click", (e) => {
+  const row = e.target.closest('[data-role="open-user-thread"]');
+  if (!row) return;
+  openUserThread(row.dataset.id, row.dataset.subject);
+});
+
+newThreadBtn?.addEventListener("click", () => {
+  newThreadSubjectInput.value = "";
+  newThreadModal?.classList.remove("hidden");
+});
+
+closeNewThreadModal?.addEventListener("click", () => {
+  newThreadModal?.classList.add("hidden");
+});
+
+newThreadForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const subject = newThreadSubjectInput.value.trim();
+  if (!subject) return;
+
+  const submitBtn = newThreadForm.querySelector("button[type='submit']");
+  submitBtn.disabled = true;
+
+  try {
+    let userFullName = "";
+    try {
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      userFullName = userDoc.exists ? (userDoc.data().fullName || "") : "";
+    } catch (err) {
+      console.error("Failed to fetch name for new thread:", err);
+    }
+
+    const threadRef = await db.collection("threads").add({
+      userId: user.uid,
+      userFullName,
+      subject,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastMessageText: "",
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unreadByAdmin: false,
+      unreadByUser: false
+    });
+
+    newThreadModal?.classList.add("hidden");
+    openUserThread(threadRef.id, subject);
+  } catch (err) {
+    console.error("Failed to start conversation:", err);
+    alert("Couldn't start that conversation. Please try again.");
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+closeUserChatThreadModal?.addEventListener("click", () => {
+  userChatThreadModal?.classList.add("hidden");
+  if (activeUserThreadUnsubscribe) {
+    activeUserThreadUnsubscribe();
+    activeUserThreadUnsubscribe = null;
+  }
+  activeUserThreadId = null;
+});
+
+userChatSendForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!activeUserThreadId) return;
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const text = userChatMessageInput.value.trim();
+  if (!text) return;
+
+  const sendBtn = userChatSendForm.querySelector("button[type='submit']");
+  sendBtn.disabled = true;
+
+  try {
+    let userFullName = "";
+    try {
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      userFullName = userDoc.exists ? (userDoc.data().fullName || "") : "";
+    } catch (err) {
+      console.error("Failed to fetch name for message:", err);
+    }
+
+    const threadRef = db.collection("threads").doc(activeUserThreadId);
+
+    await threadRef.collection("messages").add({
+      senderId: user.uid,
+      senderRole: "user",
+      senderName: userFullName || "You",
+      text,
+      sentAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await threadRef.update({
+      lastMessageText: text,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unreadByAdmin: true,
+      unreadByUser: false
+    });
+
+    userChatMessageInput.value = "";
+  } catch (err) {
+    console.error("Failed to send message:", err);
+    alert("Couldn't send that message. Please try again.");
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
 
 
 /* =========================
@@ -2548,10 +2860,11 @@ if (messagesHeaderBtn) {
   waitForUser().then((user) => {
     if (!user) return;
 
-    db.collection("conversations").doc(user.uid)
-      .onSnapshot((doc) => {
-        const unread = doc.exists && doc.data().unreadByUser;
-        if (unread) {
+    db.collection("threads")
+      .where("userId", "==", user.uid)
+      .where("unreadByUser", "==", true)
+      .onSnapshot((snapshot) => {
+        if (snapshot.size > 0) {
           messagesHeaderBadge.textContent = "";
           messagesHeaderBadge.classList.remove("hidden");
         } else {
@@ -2634,154 +2947,162 @@ document.addEventListener("click", async (e) => {
 
 
 /* =========================
-   PROFILE – DETAILS FORM (fullName/birthdate/contactNumber, self-editable)
+   PROFILE – DETAILS (locked, request-to-change with proof)
    ========================= */
 
-const profileDetailsForm = document.getElementById("profileDetailsForm");
-const profileDetailsError = document.getElementById("profileDetailsError");
-const profileDetailsSubmitBtn = document.getElementById("profileDetailsSubmitBtn");
+const profileDetailsSection = document.getElementById("profileDetailsSection");
 
-if (profileDetailsForm) {
-  waitForUser().then(async (user) => {
-    if (!user) return;
-
-    try {
-      const doc = await db.collection("users").doc(user.uid).get();
-      if (!doc.exists) return;
-
-      const data = doc.data();
-      pdFullName.value = data.fullName || "";
-      pdBirthdate.value = data.birthdate || "";
-      pdContactNumber.value = data.contactNumber || "";
-    } catch (err) {
-      console.error("Failed to load profile details:", err);
-    }
-  });
-}
-
-profileDetailsForm?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  profileDetailsError?.classList.add("hidden");
-
-  const user = auth.currentUser;
-  if (!user) return;
-
-  profileDetailsSubmitBtn.disabled = true;
-  profileDetailsSubmitBtn.textContent = "Saving…";
-
-  try {
-    await db.collection("users").doc(user.uid).update({
-      fullName: pdFullName.value.trim(),
-      birthdate: pdBirthdate.value,
-      contactNumber: pdContactNumber.value.trim()
-    });
-
-    alert("Profile updated.");
-  } catch (err) {
-    console.error("Failed to save profile details:", err);
-    profileDetailsError.textContent = "Something went wrong. Please try again.";
-    profileDetailsError.classList.remove("hidden");
-  } finally {
-    profileDetailsSubmitBtn.disabled = false;
-    profileDetailsSubmitBtn.textContent = "Save Changes";
-  }
-});
-
-
-/* =========================
-   PROFILE – ADDRESS (admin-approved change requests)
-   ========================= */
-
-const addressSection = document.getElementById("addressSection");
-
-function renderAddressDisplay(currentAddress) {
-  addressSection.innerHTML = `
-    <p class="event-meta">${currentAddress || "Not set"}</p>
-    <button type="button" class="action-card small" data-role="request-address-change">
-      Request Address Change
+function renderProfileDisplay(current) {
+  profileDetailsSection.innerHTML = `
+    <p class="event-meta"><strong>Name:</strong> ${current.fullName || "Not set"}</p>
+    <p class="event-meta"><strong>Birthdate:</strong> ${current.birthdate || "Not set"}</p>
+    <p class="event-meta"><strong>Contact:</strong> ${current.contactNumber || "Not set"}</p>
+    <p class="event-meta"><strong>Address:</strong> ${current.address || "Not set"}</p>
+    <button type="button" class="action-card small" data-role="request-profile-change">
+      Request a Change
     </button>
   `;
 }
 
-function renderAddressPending(currentAddress, requestedAddress) {
-  addressSection.innerHTML = `
-    <p class="event-meta">Current: ${currentAddress || "Not set"}</p>
-    <p class="dashboard-subtext">
-      Requested: <strong>${requestedAddress}</strong> — pending admin approval
-    </p>
+function renderProfilePending(current, requested) {
+  profileDetailsSection.innerHTML = `
+    <p class="dashboard-subtext">Your requested changes are pending admin approval:</p>
+    <p class="event-meta"><strong>Name:</strong> ${requested.fullName || current.fullName || ""}</p>
+    <p class="event-meta"><strong>Birthdate:</strong> ${requested.birthdate || current.birthdate || ""}</p>
+    <p class="event-meta"><strong>Contact:</strong> ${requested.contactNumber || current.contactNumber || ""}</p>
+    <p class="event-meta"><strong>Address:</strong> ${requested.address || current.address || ""}</p>
   `;
 }
 
-function renderAddressEditor(currentAddress) {
-  addressSection.innerHTML = `
-    <form id="addressRequestForm" class="status-input-row">
-      <input id="addressRequestInput" type="text" placeholder="New address" value="${currentAddress ? currentAddress.replace(/"/g, "&quot;") : ""}" required>
-      <button type="submit" class="submit-btn">Submit</button>
+function renderProfileRequestForm(current) {
+  const esc = (v) => (v || "").replace(/"/g, "&quot;");
+
+  profileDetailsSection.innerHTML = `
+    <form id="profileChangeRequestForm" class="admin-form">
+      <label>Full Name</label>
+      <input id="pcrFullName" value="${esc(current.fullName)}" required>
+
+      <label>Birthdate</label>
+      <input id="pcrBirthdate" type="date" value="${esc(current.birthdate)}" required>
+
+      <label>Contact Number</label>
+      <input id="pcrContactNumber" type="tel" value="${esc(current.contactNumber)}" required>
+
+      <label>Address</label>
+      <input id="pcrAddress" value="${esc(current.address)}" required>
+
+      <label>Proof (valid ID or a recent photo showing your details)</label>
+      <input id="pcrProofFile" type="file" accept="image/png, image/jpeg" required>
+      <img id="pcrProofPreview" class="template-preview hidden" alt="Proof preview">
+
+      <div id="profileChangeRequestError" class="form-error hidden"></div>
+
+      <button type="submit" id="pcrSubmitBtn" class="submit-btn">Submit Request</button>
+      <span id="pcrCancelBtn" class="back-link">Cancel</span>
     </form>
   `;
 
-  document.getElementById("addressRequestForm").addEventListener("submit", async (e) => {
+  let proofDataUrl = null;
+
+  document.getElementById("pcrProofFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      proofDataUrl = await compressImageToDataUrl(file, 800, 0.8);
+      const preview = document.getElementById("pcrProofPreview");
+      preview.src = proofDataUrl;
+      preview.classList.remove("hidden");
+    } catch (err) {
+      console.error("Proof processing failed:", err);
+      alert("Couldn't process that image. Try a different file.");
+    }
+  });
+
+  document.getElementById("pcrCancelBtn").addEventListener("click", () => {
+    renderProfileDisplay(current);
+  });
+
+  document.getElementById("profileChangeRequestForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    const errorEl = document.getElementById("profileChangeRequestError");
+    errorEl.classList.add("hidden");
 
     const user = auth.currentUser;
     if (!user) return;
 
-    const requestedAddress = document.getElementById("addressRequestInput").value.trim();
-    if (!requestedAddress || requestedAddress === currentAddress) {
-      renderAddressDisplay(currentAddress);
+    if (!proofDataUrl) {
+      errorEl.textContent = "Please upload proof (a valid ID or recent photo).";
+      errorEl.classList.remove("hidden");
       return;
     }
 
+    const submitBtn = document.getElementById("pcrSubmitBtn");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting…";
+
+    const requested = {
+      fullName: document.getElementById("pcrFullName").value.trim(),
+      birthdate: document.getElementById("pcrBirthdate").value,
+      contactNumber: document.getElementById("pcrContactNumber").value.trim(),
+      address: document.getElementById("pcrAddress").value.trim()
+    };
+
     try {
-      await db.collection("addressChangeRequests").doc(user.uid).set({
+      await db.collection("profileChangeRequests").doc(user.uid).set({
         userId: user.uid,
-        currentAddress: currentAddress || "",
-        requestedAddress,
+        current,
+        requested,
+        proofPhotoData: proofDataUrl,
         status: "pending",
         requestedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      renderAddressPending(currentAddress, requestedAddress);
+      renderProfilePending(current, requested);
     } catch (err) {
-      console.error("Failed to submit address change request:", err);
-      alert("Couldn't submit that request. Please try again.");
+      console.error("Failed to submit profile change request:", err);
+      errorEl.textContent = "Something went wrong. Please try again.";
+      errorEl.classList.remove("hidden");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Request";
     }
   });
 }
 
-if (addressSection) {
+if (profileDetailsSection) {
   waitForUser().then(async (user) => {
     if (!user) return;
 
     try {
       const [userDoc, requestDoc] = await Promise.all([
         db.collection("users").doc(user.uid).get(),
-        db.collection("addressChangeRequests").doc(user.uid).get()
+        db.collection("profileChangeRequests").doc(user.uid).get()
       ]);
 
-      const currentAddress = userDoc.exists ? (userDoc.data().address || "") : "";
+      const current = userDoc.exists ? {
+        fullName: userDoc.data().fullName || "",
+        birthdate: userDoc.data().birthdate || "",
+        contactNumber: userDoc.data().contactNumber || "",
+        address: userDoc.data().address || ""
+      } : { fullName: "", birthdate: "", contactNumber: "", address: "" };
 
       if (requestDoc.exists && requestDoc.data().status === "pending") {
-        renderAddressPending(currentAddress, requestDoc.data().requestedAddress);
+        renderProfilePending(current, requestDoc.data().requested || {});
       } else {
-        renderAddressDisplay(currentAddress);
+        renderProfileDisplay(current);
       }
+
+      profileDetailsSection.addEventListener("click", (e) => {
+        const btn = e.target.closest('[data-role="request-profile-change"]');
+        if (!btn) return;
+        renderProfileRequestForm(current);
+      });
     } catch (err) {
-      console.error("Failed to load address status:", err);
-      addressSection.innerHTML = '<p class="dashboard-subtext">Couldn\'t load address.</p>';
+      console.error("Failed to load profile details:", err);
+      profileDetailsSection.innerHTML = '<p class="dashboard-subtext">Couldn\'t load profile details.</p>';
     }
-  });
-
-  addressSection.addEventListener("click", async (e) => {
-    const btn = e.target.closest('[data-role="request-address-change"]');
-    if (!btn) return;
-
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const doc = await db.collection("users").doc(user.uid).get();
-    const currentAddress = doc.exists ? (doc.data().address || "") : "";
-    renderAddressEditor(currentAddress);
   });
 }
 

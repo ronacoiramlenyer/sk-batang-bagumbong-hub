@@ -13,6 +13,11 @@
 
     <!-- HEADER -->
     <div id="dashboardBanner" class="dashboard-header dashboard-banner">
+      <button id="changeBannerBtn" type="button" class="banner-edit-btn" title="Change cover photo">
+        📷
+      </button>
+      <input id="bannerFileInput" type="file" accept="image/png, image/jpeg" class="hidden">
+
       <div class="header-icon-row">
         <button id="messagesHeaderBtn" type="button" class="header-icon-btn">
           💬
@@ -23,19 +28,14 @@
         </button>
       </div>
 
-      <button id="changeBannerBtn" type="button" class="banner-edit-btn" title="Change cover photo">
-        📷
-      </button>
-      <input id="bannerFileInput" type="file" accept="image/png, image/jpeg" class="hidden">
-
-      <h1 class="banner-title">SK Batang Bagumbong</h1>
+      <div class="banner-brand-row">
+        <img src="logo.png" alt="Sangguniang Kabataan Barangay 171 Bagumbong logo" class="banner-logo">
+        <h1 class="banner-title">Sangguniang Kabataan Bagumbong 171</h1>
+      </div>
     </div>
 
-    <!-- WHAT'S ON YOUR MIND -->
-    <div class="dashboard-section">
-      <div id="statusWidget" class="status-row">
-        <span class="dashboard-subtext">Loading…</span>
-      </div>
+    <div id="statusWidget" class="banner-status-bubble">
+      <span class="dashboard-subtext">Loading…</span>
     </div>
 
     <!-- ANNOUNCEMENTS -->

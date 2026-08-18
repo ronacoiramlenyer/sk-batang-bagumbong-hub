@@ -35,32 +35,43 @@ service cloud.firestore {
         request.resource.data.role == 'user' &&
         request.resource.data.idStatus == 'pending';
 
-      // Owner can update their own profile (e.g. completing missing
-      // fields), but can't change their own role, idStatus, or idNumber —
-      // those are admin-only, via the isAdmin() branch below. Address can
-      // only be SET for the first time this way (e.g. completing an
-      // originally-empty profile) — changing an address that's already on
-      // file has to go through an addressChangeRequests doc instead, which
-      // only an admin can approve.
+      // Owner can update their own profile to complete originally-missing
+      // fields (e.g. legacy accounts filling in address/birthdate/contact
+      // for the first time), but can't change their own role, idStatus, or
+      // idNumber (admin-only, via the isAdmin() branch below). Once a field
+      // is set, changing it later requires a profileChangeRequests doc with
+      // admin approval instead — fullName is never self-editable at all,
+      // since it's always set at signup.
       allow update: if isOwner(userId) &&
         request.resource.data.role == resource.data.role &&
         request.resource.data.get('idStatus', null) == resource.data.get('idStatus', null) &&
         request.resource.data.get('idNumber', null) == resource.data.get('idNumber', null) &&
+        request.resource.data.get('fullName', '') == resource.data.get('fullName', '') &&
+        (
+          request.resource.data.get('birthdate', '') == resource.data.get('birthdate', '') ||
+          resource.data.get('birthdate', '') == ''
+        ) &&
+        (
+          request.resource.data.get('contactNumber', '') == resource.data.get('contactNumber', '') ||
+          resource.data.get('contactNumber', '') == ''
+        ) &&
         (
           request.resource.data.get('address', '') == resource.data.get('address', '') ||
           resource.data.get('address', '') == ''
         );
 
       // Admins can update any user doc, including role, ID approval,
-      // and applying an approved address change.
+      // and applying an approved profile change request.
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     // ---------------------------
-    // addressChangeRequests/{userId}  (doc ID == the requester's uid)
+    // profileChangeRequests/{userId}  (doc ID == the requester's uid)
+    // Covers fullName, birthdate, contactNumber, and address in one
+    // request, with a required proof photo (ID or recent photo).
     // ---------------------------
-    match /addressChangeRequests/{userId} {
+    match /profileChangeRequests/{userId} {
       // Owner reads their own; admin reads all (needed for the review queue).
       allow read: if isOwner(userId) || isAdmin();
 
@@ -69,8 +80,8 @@ service cloud.firestore {
       allow create: if isOwner(userId) &&
         request.resource.data.userId == userId &&
         request.resource.data.status == 'pending' &&
-        (!exists(/databases/$(database)/documents/addressChangeRequests/$(userId)) ||
-         get(/databases/$(database)/documents/addressChangeRequests/$(userId)).data.status != 'pending');
+        (!exists(/databases/$(database)/documents/profileChangeRequests/$(userId)) ||
+         get(/databases/$(database)/documents/profileChangeRequests/$(userId)).data.status != 'pending');
 
       // Only admins can approve/reject. Owners can also "update" here —
       // because the client resubmits via .set(), Firestore treats a second
@@ -137,20 +148,33 @@ service cloud.firestore {
     }
 
     // ---------------------------
-    // conversations/{userId}  (doc ID == the user's uid)
-    // conversations/{userId}/messages/{messageId}
+    // threads/{threadId}  (auto-generated ID — a user can have many)
+    // threads/{threadId}/messages/{messageId}
     // ---------------------------
-    match /conversations/{userId} {
-      // Owner and admin can both read/write the conversation's metadata
-      // (last message preview, unread flags) — used by both sides.
-      allow read, write: if isOwner(userId) || isAdmin();
+    match /threads/{threadId} {
+      // Owner reads/writes only their own threads; admin reads/writes all.
+      allow read, update: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // Starting a new thread — must be the owner's own userId.
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read: if isOwner(userId) || isAdmin();
-        // Anyone in the conversation can post, but only as themselves —
-        // no impersonating the other party.
-        allow create: if (isOwner(userId) || isAdmin()) &&
+        // Ownership is checked via the parent thread doc, since threadId
+        // is a random ID (not the user's uid like the old model).
+        allow read: if isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/threads/$(threadId)).data.userId == request.auth.uid);
+
+        // Anyone in the thread can post, but only as themselves.
+        allow create: if (isAdmin() ||
+          (isSignedIn() &&
+           get(/databases/$(database)/documents/threads/$(threadId)).data.userId == request.auth.uid)) &&
           request.resource.data.senderId == request.auth.uid;
+
         // Messages are immutable once sent.
         allow update, delete: if false;
       }

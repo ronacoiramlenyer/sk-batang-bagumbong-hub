@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Messages – SK Batang Bagumbong Hub</title>
+  <title>Messages – Sangguniang Kabataan Bagumbong 171</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -14,20 +14,52 @@
     <div class="dashboard-header">
       <h1>Messages</h1>
       <p class="dashboard-subtext">
-        Chat with the SK office about inquiries, applications, or events.
+        Start a conversation with the SK office about inquiries, applications, or events.
       </p>
     </div>
 
-    <div id="chatThread" class="chat-thread">
-      <p class="dashboard-subtext">Loading…</p>
+    <button id="newThreadBtn" type="button" class="submit-btn" style="margin-bottom:16px;">
+      + New Conversation
+    </button>
+
+    <div id="threadsList" class="convo-list">
+      <p class="dashboard-subtext">No conversations yet.</p>
     </div>
 
-    <form id="chatSendForm" class="chat-send-form">
-      <input id="chatMessageInput" type="text" placeholder="Type a message…" required autocomplete="off">
-      <button type="submit" class="submit-btn">Send</button>
-    </form>
-
     <span class="back-link" onclick="window.location.href='dashboard.html'">← Back to Dashboard</span>
+
+    <!-- NEW THREAD MODAL -->
+    <div id="newThreadModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Start a Conversation</h3>
+
+        <form id="newThreadForm">
+          <label>Subject</label>
+          <input id="newThreadSubject" type="text" required placeholder="e.g. Question about my SK ID">
+
+          <button type="submit" class="submit-btn">Start</button>
+          <span id="closeNewThreadModal" class="back-link">Cancel</span>
+        </form>
+      </div>
+    </div>
+
+    <!-- THREAD MODAL -->
+    <div id="userChatThreadModal" class="modal hidden">
+      <div class="modal-content registrants-content">
+        <h3 id="userChatThreadSubject">Conversation</h3>
+
+        <div id="userChatThread" class="chat-thread">
+          <p class="dashboard-subtext">Loading…</p>
+        </div>
+
+        <form id="userChatSendForm" class="chat-send-form">
+          <input id="userChatMessageInput" type="text" placeholder="Type a message…" required autocomplete="off">
+          <button type="submit" class="submit-btn">Send</button>
+        </form>
+
+        <span id="closeUserChatThreadModal" class="back-link">Close</span>
+      </div>
+    </div>
 
   </div>
 
