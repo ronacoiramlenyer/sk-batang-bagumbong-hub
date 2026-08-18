@@ -133,13 +133,15 @@ const ADMIN_ONLY_PAGES = [
   "admin-manage-announcements.html",
   "admin-certificate-template.html",
   "admin-id-template.html",
-  "admin-manage-id-applications.html"
+  "admin-manage-id-applications.html",
+  "admin-messages.html"
 ];
 
 const AUTH_REQUIRED_PAGES = [
   ...ADMIN_ONLY_PAGES,
   "dashboard.html",
-  "complete-profile.html"
+  "complete-profile.html",
+  "messages.html"
 ];
 
 function isProfileComplete(userData) {
@@ -1476,6 +1478,160 @@ generateAllCertificatesBtn?.addEventListener("click", async () => {
 
 
 /* =========================
+   ADMIN – UNREAD MESSAGES BADGE
+   ========================= */
+
+const adminUnreadBadge = document.getElementById("adminUnreadBadge");
+
+if (adminUnreadBadge) {
+  db.collection("conversations")
+    .where("unreadByAdmin", "==", true)
+    .onSnapshot((snapshot) => {
+      if (snapshot.size > 0) {
+        adminUnreadBadge.textContent = snapshot.size;
+        adminUnreadBadge.classList.remove("hidden");
+      } else {
+        adminUnreadBadge.classList.add("hidden");
+      }
+    }, (err) => {
+      console.error("Failed to load unread count:", err);
+    });
+}
+
+
+/* =========================
+   ADMIN – MESSAGES (admin-messages.html)
+   ========================= */
+
+const conversationsList = document.getElementById("conversationsList");
+const chatThreadModal = document.getElementById("chatThreadModal");
+const chatThreadUserName = document.getElementById("chatThreadUserName");
+const adminChatThread = document.getElementById("adminChatThread");
+const adminChatSendForm = document.getElementById("adminChatSendForm");
+const adminChatMessageInput = document.getElementById("adminChatMessageInput");
+const closeChatThreadModal = document.getElementById("closeChatThreadModal");
+
+let activeConversationUserId = null;
+let activeConversationUnsubscribe = null;
+
+if (conversationsList) {
+  db.collection("conversations")
+    .orderBy("lastMessageAt", "desc")
+    .onSnapshot((snapshot) => {
+
+      conversationsList.innerHTML = "";
+
+      if (snapshot.empty) {
+        conversationsList.innerHTML =
+          '<p class="dashboard-subtext">No conversations yet.</p>';
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const convo = doc.data();
+
+        const card = document.createElement("div");
+        card.className = "event-card";
+        card.setAttribute("data-role", "open-conversation");
+        card.setAttribute("data-id", doc.id);
+        card.setAttribute("data-name", convo.userFullName || "Unknown");
+        card.style.cursor = "pointer";
+
+        card.innerHTML = `
+          <div class="event-header">
+            <h3 class="event-title">${convo.userFullName || "Unknown"}</h3>
+            ${convo.unreadByAdmin ? '<span class="status-badge status-ongoing">NEW</span>' : ""}
+          </div>
+          <p class="event-meta">${convo.lastMessageText || ""}</p>
+        `;
+
+        conversationsList.appendChild(card);
+      });
+    }, (err) => {
+      console.error("Failed to load conversations:", err);
+      conversationsList.innerHTML =
+        '<p class="dashboard-subtext">Failed to load conversations.</p>';
+    });
+}
+
+// Open a conversation thread
+document.addEventListener("click", (e) => {
+  const card = e.target.closest('[data-role="open-conversation"]');
+  if (!card) return;
+
+  activeConversationUserId = card.dataset.id;
+  chatThreadUserName.textContent = card.dataset.name || "Conversation";
+  adminChatThread.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
+  chatThreadModal?.classList.remove("hidden");
+
+  const conversationRef = db.collection("conversations").doc(activeConversationUserId);
+
+  // Mark as read by admin on open
+  conversationRef.set({ unreadByAdmin: false }, { merge: true }).catch((err) => {
+    console.error("Failed to mark conversation read:", err);
+  });
+
+  if (activeConversationUnsubscribe) activeConversationUnsubscribe();
+
+  activeConversationUnsubscribe = conversationRef.collection("messages")
+    .orderBy("sentAt", "asc")
+    .onSnapshot((snapshot) => {
+      const messages = snapshot.docs.map((d) => d.data());
+      renderMessageBubbles(adminChatThread, messages, "admin");
+    }, (err) => {
+      console.error("Failed to load thread:", err);
+      adminChatThread.innerHTML = '<p class="dashboard-subtext">Failed to load messages.</p>';
+    });
+});
+
+closeChatThreadModal?.addEventListener("click", () => {
+  chatThreadModal?.classList.add("hidden");
+  if (activeConversationUnsubscribe) {
+    activeConversationUnsubscribe();
+    activeConversationUnsubscribe = null;
+  }
+  activeConversationUserId = null;
+});
+
+adminChatSendForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!activeConversationUserId) return;
+
+  const text = adminChatMessageInput.value.trim();
+  if (!text) return;
+
+  const admin = auth.currentUser;
+  const sendBtn = adminChatSendForm.querySelector("button[type='submit']");
+  sendBtn.disabled = true;
+
+  try {
+    const conversationRef = db.collection("conversations").doc(activeConversationUserId);
+
+    await conversationRef.collection("messages").add({
+      senderId: admin.uid,
+      senderRole: "admin",
+      text,
+      sentAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await conversationRef.set({
+      lastMessageText: text,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unreadByUser: true,
+      unreadByAdmin: false
+    }, { merge: true });
+
+    adminChatMessageInput.value = "";
+  } catch (err) {
+    console.error("Failed to send message:", err);
+    alert("Couldn't send that message. Please try again.");
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+
+/* =========================
    ADMIN – SK ID APPROVALS
    ========================= */
 
@@ -1755,6 +1911,125 @@ document.addEventListener("click", async (e) => {
     btn.textContent = "Join Event";
   }
 });
+
+
+/* =========================
+   USER – MESSAGES (messages.html)
+   ========================= */
+
+const chatThread = document.getElementById("chatThread");
+const chatSendForm = document.getElementById("chatSendForm");
+const chatMessageInput = document.getElementById("chatMessageInput");
+
+function renderMessageBubbles(container, messages, myRole) {
+  container.innerHTML = "";
+
+  if (messages.length === 0) {
+    container.innerHTML = '<p class="dashboard-subtext">No messages yet. Say hello!</p>';
+    return;
+  }
+
+  messages.forEach((msg) => {
+    const bubble = document.createElement("div");
+    const isMine = msg.senderRole === myRole;
+    bubble.className = `chat-bubble ${isMine ? "chat-bubble-mine" : "chat-bubble-theirs"}`;
+    bubble.textContent = msg.text;
+    container.appendChild(bubble);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+if (chatThread) {
+  waitForUser().then((user) => {
+    if (!user) return;
+
+    const conversationRef = db.collection("conversations").doc(user.uid);
+
+    // Mark as read by the user on open
+    conversationRef.set({ unreadByUser: false }, { merge: true }).catch((err) => {
+      console.error("Failed to mark conversation read:", err);
+    });
+
+    conversationRef.collection("messages")
+      .orderBy("sentAt", "asc")
+      .onSnapshot((snapshot) => {
+        const messages = snapshot.docs.map((d) => d.data());
+        renderMessageBubbles(chatThread, messages, "user");
+      }, (err) => {
+        console.error("Failed to load messages:", err);
+        chatThread.innerHTML = '<p class="dashboard-subtext">Failed to load messages.</p>';
+      });
+
+    chatSendForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const text = chatMessageInput.value.trim();
+      if (!text) return;
+
+      const sendBtn = chatSendForm.querySelector("button[type='submit']");
+      sendBtn.disabled = true;
+
+      try {
+        let userFullName = "";
+        try {
+          const userDoc = await db.collection("users").doc(user.uid).get();
+          userFullName = userDoc.exists ? (userDoc.data().fullName || "") : "";
+        } catch (err) {
+          console.error("Failed to fetch name for conversation meta:", err);
+        }
+
+        await conversationRef.collection("messages").add({
+          senderId: user.uid,
+          senderRole: "user",
+          text,
+          sentAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        await conversationRef.set({
+          userId: user.uid,
+          userFullName,
+          lastMessageText: text,
+          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+          unreadByAdmin: true,
+          unreadByUser: false
+        }, { merge: true });
+
+        chatMessageInput.value = "";
+      } catch (err) {
+        console.error("Failed to send message:", err);
+        alert("Couldn't send that message. Please try again.");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
+  });
+}
+
+
+/* =========================
+   USER DASHBOARD – MESSAGES UNREAD INDICATOR
+   ========================= */
+
+const userMessagesStatus = document.getElementById("userMessagesStatus");
+
+if (userMessagesStatus) {
+  waitForUser().then((user) => {
+    if (!user) return;
+
+    db.collection("conversations").doc(user.uid)
+      .onSnapshot((doc) => {
+        const unread = doc.exists && doc.data().unreadByUser;
+        userMessagesStatus.innerHTML = `
+          <button type="button" class="action-card small" onclick="window.location.href='messages.html'">
+            ${unread ? "🔴 " : ""}Open Messages
+          </button>
+        `;
+      }, (err) => {
+        console.error("Failed to load message status:", err);
+      });
+  });
+}
 
 
 /* =========================

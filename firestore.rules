@@ -98,6 +98,26 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------------------------
+    // conversations/{userId}  (doc ID == the user's uid)
+    // conversations/{userId}/messages/{messageId}
+    // ---------------------------
+    match /conversations/{userId} {
+      // Owner and admin can both read/write the conversation's metadata
+      // (last message preview, unread flags) — used by both sides.
+      allow read, write: if isOwner(userId) || isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isOwner(userId) || isAdmin();
+        // Anyone in the conversation can post, but only as themselves —
+        // no impersonating the other party.
+        allow create: if (isOwner(userId) || isAdmin()) &&
+          request.resource.data.senderId == request.auth.uid;
+        // Messages are immutable once sent.
+        allow update, delete: if false;
+      }
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;

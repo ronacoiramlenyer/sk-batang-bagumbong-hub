@@ -1227,3 +1227,60 @@ textarea {
   flex-shrink: 0;
   border: 1px solid #ddd;
 }
+
+/* =========================
+   CHAT / MESSAGES
+   ========================= */
+
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--gray);
+  margin: 16px 0;
+}
+
+.chat-bubble {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-bubble-mine {
+  align-self: flex-end;
+  background: var(--green-primary);
+  color: var(--light);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble-theirs {
+  align-self: flex-start;
+  background: var(--light);
+  border: 1px solid #ddd;
+  border-bottom-left-radius: 4px;
+}
+
+.chat-send-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat-send-form input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.chat-send-form .submit-btn {
+  margin-top: 0;
+  width: auto;
+  padding: 12px 18px;
+  white-space: nowrap;
+}

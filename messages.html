@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Messages – SK Batang Bagumbong Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container dashboard">
+
+    <div class="dashboard-header">
+      <h1>Messages</h1>
+      <p class="dashboard-subtext">
+        Chat with the SK office about inquiries, applications, or events.
+      </p>
+    </div>
+
+    <div id="chatThread" class="chat-thread">
+      <p class="dashboard-subtext">Loading…</p>
+    </div>
+
+    <form id="chatSendForm" class="chat-send-form">
+      <input id="chatMessageInput" type="text" placeholder="Type a message…" required autocomplete="off">
+      <button type="submit" class="submit-btn">Send</button>
+    </form>
+
+    <span class="back-link" onclick="window.location.href='dashboard.html'">← Back to Dashboard</span>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>
