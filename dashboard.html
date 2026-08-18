@@ -12,7 +12,7 @@
   <div class="app-container dashboard">
 
     <!-- HEADER -->
-    <div class="dashboard-header">
+    <div id="dashboardBanner" class="dashboard-header dashboard-banner">
       <div class="header-icon-row">
         <button id="messagesHeaderBtn" type="button" class="header-icon-btn">
           💬
@@ -23,9 +23,19 @@
         </button>
       </div>
 
-      <p class="dashboard-subtext" style="margin-top:44px;">
-        Here’s what’s happening in the community
-      </p>
+      <button id="changeBannerBtn" type="button" class="banner-edit-btn" title="Change cover photo">
+        📷
+      </button>
+      <input id="bannerFileInput" type="file" accept="image/png, image/jpeg" class="hidden">
+
+      <h1 class="banner-title">SK Batang Bagumbong</h1>
+    </div>
+
+    <!-- WHAT'S ON YOUR MIND -->
+    <div class="dashboard-section">
+      <div id="statusWidget" class="status-row">
+        <span class="dashboard-subtext">Loading…</span>
+      </div>
     </div>
 
     <!-- ANNOUNCEMENTS -->

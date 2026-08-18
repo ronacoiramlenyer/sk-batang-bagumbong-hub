@@ -37,14 +37,52 @@ service cloud.firestore {
 
       // Owner can update their own profile (e.g. completing missing
       // fields), but can't change their own role, idStatus, or idNumber —
-      // those are admin-only, via the isAdmin() branch below.
+      // those are admin-only, via the isAdmin() branch below. Address can
+      // only be SET for the first time this way (e.g. completing an
+      // originally-empty profile) — changing an address that's already on
+      // file has to go through an addressChangeRequests doc instead, which
+      // only an admin can approve.
       allow update: if isOwner(userId) &&
         request.resource.data.role == resource.data.role &&
         request.resource.data.get('idStatus', null) == resource.data.get('idStatus', null) &&
-        request.resource.data.get('idNumber', null) == resource.data.get('idNumber', null);
+        request.resource.data.get('idNumber', null) == resource.data.get('idNumber', null) &&
+        (
+          request.resource.data.get('address', '') == resource.data.get('address', '') ||
+          resource.data.get('address', '') == ''
+        );
 
-      // Admins can update any user doc, including role and ID approval.
+      // Admins can update any user doc, including role, ID approval,
+      // and applying an approved address change.
       allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------
+    // addressChangeRequests/{userId}  (doc ID == the requester's uid)
+    // ---------------------------
+    match /addressChangeRequests/{userId} {
+      // Owner reads their own; admin reads all (needed for the review queue).
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Owner can only submit a request for themselves, and only while no
+      // request is already pending (prevents piling up duplicate requests).
+      allow create: if isOwner(userId) &&
+        request.resource.data.userId == userId &&
+        request.resource.data.status == 'pending' &&
+        (!exists(/databases/$(database)/documents/addressChangeRequests/$(userId)) ||
+         get(/databases/$(database)/documents/addressChangeRequests/$(userId)).data.status != 'pending');
+
+      // Only admins can approve/reject. Owners can also "update" here —
+      // because the client resubmits via .set(), Firestore treats a second
+      // request (after a prior one was already resolved) as an update, not
+      // a create, once the doc exists — so this mirrors the create rule
+      // above for that resubmission case.
+      allow update: if isAdmin() ||
+        (isOwner(userId) &&
+         resource.data.status != 'pending' &&
+         request.resource.data.userId == userId &&
+         request.resource.data.status == 'pending');
+
       allow delete: if isAdmin();
     }
 

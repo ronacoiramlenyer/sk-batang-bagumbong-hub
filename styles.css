@@ -1671,3 +1671,134 @@ textarea {
 .clickable {
   cursor: pointer;
 }
+
+/* =========================
+   DASHBOARD BANNER
+   ========================= */
+
+.dashboard-banner {
+  margin: -32px -32px 24px -32px;
+  padding: 20px 24px 30px;
+  min-height: 120px;
+  background: linear-gradient(135deg, var(--green-primary), var(--orange-primary));
+  background-size: cover;
+  background-position: center;
+  border-radius: 18px 18px 0 0;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.dashboard-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.45), rgba(0,0,0,0) 60%);
+  pointer-events: none;
+}
+
+.dashboard-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 85% -30%, rgba(255,255,255,0.22), transparent 55%);
+  pointer-events: none;
+}
+
+.dashboard-banner .header-icon-row {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+}
+
+.dashboard-banner .header-icon-btn {
+  background: rgba(255,255,255,0.25);
+  color: var(--light);
+}
+
+.dashboard-banner .header-icon-btn:hover {
+  background: rgba(255,255,255,0.4);
+}
+
+.banner-edit-btn {
+  all: unset;
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  color: var(--light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.banner-edit-btn:hover {
+  background: rgba(0,0,0,0.65);
+}
+
+.banner-title {
+  position: relative;
+  color: var(--light);
+  font-size: 20px;
+  margin: 0;
+  text-align: left;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.banner-subtext {
+  position: relative;
+  color: rgba(255,255,255,0.92);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* =========================
+   WHAT'S ON YOUR MIND
+   ========================= */
+
+.status-input-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.status-input-row input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.status-input-row .submit-btn {
+  margin-top: 0;
+  width: auto;
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+
+.status-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.status-display-text {
+  font-size: 14px;
+  color: var(--dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-display-text.placeholder {
+  color: #888;
+}

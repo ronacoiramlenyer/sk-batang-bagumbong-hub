@@ -56,8 +56,11 @@ const registerError = document.getElementById("registerError");
 const registerSubmitBtn = document.getElementById("registerSubmitBtn");
 const regPhotoFileInput = document.getElementById("regPhotoFile");
 const regPhotoPreview = document.getElementById("regPhotoPreview");
+const regIdDocumentFileInput = document.getElementById("regIdDocumentFile");
+const regIdDocumentPreview = document.getElementById("regIdDocumentPreview");
 
 let regPhotoDataUrl = null;
+let regIdDocumentDataUrl = null;
 
 regPhotoFileInput?.addEventListener("change", async () => {
   const file = regPhotoFileInput.files[0];
@@ -73,12 +76,34 @@ regPhotoFileInput?.addEventListener("change", async () => {
   }
 });
 
+regIdDocumentFileInput?.addEventListener("change", async () => {
+  const file = regIdDocumentFileInput.files[0];
+  if (!file) return;
+
+  try {
+    // Slightly larger than the profile photo — needs to stay legible
+    // for the admin to read printed details on the ID.
+    regIdDocumentDataUrl = await compressImageToDataUrl(file, 800, 0.8);
+    regIdDocumentPreview.src = regIdDocumentDataUrl;
+    regIdDocumentPreview.classList.remove("hidden");
+  } catch (err) {
+    console.error("ID document processing failed:", err);
+    alert("Couldn't process that image. Try a different file.");
+  }
+});
+
 registerForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
   registerError?.classList.add("hidden");
 
   if (!regPhotoDataUrl) {
     registerError.textContent = "Please upload a photo.";
+    registerError.classList.remove("hidden");
+    return;
+  }
+
+  if (!regIdDocumentDataUrl) {
+    registerError.textContent = "Please upload a valid ID.";
     registerError.classList.remove("hidden");
     return;
   }
@@ -99,6 +124,7 @@ registerForm?.addEventListener("submit", async (e) => {
       birthdate: regBirthdate.value,
       contactNumber: regContactNumber.value.trim(),
       photoData: regPhotoDataUrl,
+      idDocumentData: regIdDocumentDataUrl,
       role: "user",
       idStatus: "pending",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -134,7 +160,8 @@ const ADMIN_ONLY_PAGES = [
   "admin-certificate-template.html",
   "admin-id-template.html",
   "admin-manage-id-applications.html",
-  "admin-messages.html"
+  "admin-messages.html",
+  "admin-manage-users.html"
 ];
 
 const AUTH_REQUIRED_PAGES = [
@@ -150,7 +177,8 @@ function isProfileComplete(userData) {
     userData.address &&
     userData.birthdate &&
     userData.contactNumber &&
-    userData.photoData
+    userData.photoData &&
+    userData.idDocumentData
   );
 }
 
@@ -233,8 +261,11 @@ const completeProfileError = document.getElementById("completeProfileError");
 const completeProfileSubmitBtn = document.getElementById("completeProfileSubmitBtn");
 const cpPhotoFileInput = document.getElementById("cpPhotoFile");
 const cpPhotoPreview = document.getElementById("cpPhotoPreview");
+const cpIdDocumentFileInput = document.getElementById("cpIdDocumentFile");
+const cpIdDocumentPreview = document.getElementById("cpIdDocumentPreview");
 
 let cpPhotoDataUrl = null;
+let cpIdDocumentDataUrl = null;
 
 cpPhotoFileInput?.addEventListener("change", async () => {
   const file = cpPhotoFileInput.files[0];
@@ -250,6 +281,20 @@ cpPhotoFileInput?.addEventListener("change", async () => {
   }
 });
 
+cpIdDocumentFileInput?.addEventListener("change", async () => {
+  const file = cpIdDocumentFileInput.files[0];
+  if (!file) return;
+
+  try {
+    cpIdDocumentDataUrl = await compressImageToDataUrl(file, 800, 0.8);
+    cpIdDocumentPreview.src = cpIdDocumentDataUrl;
+    cpIdDocumentPreview.classList.remove("hidden");
+  } catch (err) {
+    console.error("ID document processing failed:", err);
+    alert("Couldn't process that image. Try a different file.");
+  }
+});
+
 // Prefill with whatever's already on file (in case only some fields are missing)
 if (completeProfileForm) {
   waitForUser().then(async (user) => {
@@ -260,13 +305,24 @@ if (completeProfileForm) {
       if (!doc.exists) return;
 
       const data = doc.data();
-      if (data.address) cpAddress.value = data.address;
+      if (data.address) {
+        cpAddress.value = data.address;
+        // Address already on file — changing it now goes through the
+        // admin-approval flow (Profile page), not this form.
+        cpAddress.readOnly = true;
+        cpAddress.title = "To change your address, request it from your Profile page after this.";
+      }
       if (data.birthdate) cpBirthdate.value = data.birthdate;
       if (data.contactNumber) cpContactNumber.value = data.contactNumber;
       if (data.photoData) {
         cpPhotoDataUrl = data.photoData;
         cpPhotoPreview.src = data.photoData;
         cpPhotoPreview.classList.remove("hidden");
+      }
+      if (data.idDocumentData) {
+        cpIdDocumentDataUrl = data.idDocumentData;
+        cpIdDocumentPreview.src = data.idDocumentData;
+        cpIdDocumentPreview.classList.remove("hidden");
       }
     } catch (err) {
       console.error("Failed to prefill profile:", err);
@@ -287,6 +343,12 @@ completeProfileForm?.addEventListener("submit", async (e) => {
     return;
   }
 
+  if (!cpIdDocumentDataUrl) {
+    completeProfileError.textContent = "Please upload a valid ID.";
+    completeProfileError.classList.remove("hidden");
+    return;
+  }
+
   completeProfileSubmitBtn.disabled = true;
   completeProfileSubmitBtn.textContent = "Saving…";
 
@@ -295,7 +357,8 @@ completeProfileForm?.addEventListener("submit", async (e) => {
       address: cpAddress.value.trim(),
       birthdate: cpBirthdate.value,
       contactNumber: cpContactNumber.value.trim(),
-      photoData: cpPhotoDataUrl
+      photoData: cpPhotoDataUrl,
+      idDocumentData: cpIdDocumentDataUrl
     });
 
     window.location.href = "dashboard.html";
@@ -1631,6 +1694,169 @@ if (adminUnreadBadge) {
 
 
 /* =========================
+   ADMIN – PENDING ADDRESS REQUEST BADGE
+   ========================= */
+
+const adminAddressRequestBadge = document.getElementById("adminAddressRequestBadge");
+
+if (adminAddressRequestBadge) {
+  db.collection("addressChangeRequests")
+    .where("status", "==", "pending")
+    .onSnapshot((snapshot) => {
+      if (snapshot.size > 0) {
+        adminAddressRequestBadge.textContent = snapshot.size;
+        adminAddressRequestBadge.classList.remove("hidden");
+      } else {
+        adminAddressRequestBadge.classList.add("hidden");
+      }
+    }, (err) => {
+      console.error("Failed to load pending address request count:", err);
+    });
+}
+
+
+/* =========================
+   ADMIN – USERS DIRECTORY (admin-manage-users.html)
+   ========================= */
+
+const usersList = document.getElementById("usersList");
+
+if (usersList) {
+  let cachedUsers = [];
+  let pendingAddressRequestsByUser = new Map();
+
+  function renderUsersList() {
+    if (cachedUsers.length === 0) {
+      usersList.innerHTML = '<p class="dashboard-subtext">No users yet.</p>';
+      return;
+    }
+
+    usersList.innerHTML = "";
+
+    cachedUsers.forEach((doc) => {
+      const u = doc.data();
+      const pendingRequest = pendingAddressRequestsByUser.get(doc.id);
+      const idStatus = u.idStatus || "pending";
+
+      const card = document.createElement("div");
+      card.className = "event-card admin-card collapsible-card";
+
+      card.innerHTML = `
+        <div class="collapsible-header" data-role="toggle-card">
+          <div class="collapsible-header-text">
+            ${u.photoData ? `<img class="id-app-thumb" src="${u.photoData}" alt="${u.fullName || ""}">` : ""}
+            <h3>${u.fullName || "Unknown"}</h3>
+            <span class="status-badge ${u.role === "admin" ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
+              ${u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
+            </span>
+            ${pendingRequest ? '<span class="status-badge status-archived">ADDRESS REQUEST</span>' : ""}
+          </div>
+          <span class="collapsible-chevron">▾</span>
+        </div>
+
+        <div class="collapsible-body">
+          <p class="event-meta">${u.email || ""}</p>
+          <p class="event-meta">${u.address || "No address on file"}</p>
+          <p class="event-meta">🎂 ${u.birthdate || ""} · 📞 ${u.contactNumber || ""}</p>
+          ${u.idNumber ? `<p class="event-meta"><strong>${u.idNumber}</strong></p>` : ""}
+
+          ${u.idDocumentData ? `
+            <p class="event-meta">Submitted ID:</p>
+            <img src="${u.idDocumentData}" alt="ID for ${u.fullName || ""}"
+              style="width:100%; height:auto; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
+          ` : ""}
+
+          ${pendingRequest ? `
+            <div class="status-row" style="margin-bottom:10px;">
+              <div class="status-row-left">
+                <span class="quick-access-icon" style="font-size:16px;">📍</span>
+                <span class="quick-access-label">New: ${pendingRequest.requestedAddress}</span>
+              </div>
+            </div>
+            <div class="admin-actions horizontal">
+              <button class="icon-btn status"
+                data-role="approve-address" data-id="${doc.id}"
+                title="Approve Address Change">
+                ✅
+                <span>Approve</span>
+              </button>
+              <button class="icon-btn archive"
+                data-role="reject-address" data-id="${doc.id}"
+                title="Reject Address Change">
+                ❌
+                <span>Reject</span>
+              </button>
+            </div>
+          ` : ""}
+        </div>
+      `;
+
+      usersList.appendChild(card);
+    });
+  }
+
+  db.collection("users")
+    .orderBy("fullName")
+    .onSnapshot((snapshot) => {
+      cachedUsers = snapshot.docs;
+      renderUsersList();
+    }, (err) => {
+      console.error("Failed to load users:", err);
+      usersList.innerHTML = '<p class="dashboard-subtext">Failed to load users.</p>';
+    });
+
+  db.collection("addressChangeRequests")
+    .where("status", "==", "pending")
+    .onSnapshot((snapshot) => {
+      pendingAddressRequestsByUser = new Map(
+        snapshot.docs.map((d) => [d.id, d.data()])
+      );
+      renderUsersList();
+    }, (err) => {
+      console.error("Failed to load address requests:", err);
+    });
+}
+
+// Approve / Reject an address change request
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="approve-address"], [data-role="reject-address"]');
+  if (!btn) return;
+
+  const userId = btn.dataset.id;
+  const isApprove = btn.dataset.role === "approve-address";
+  const admin = auth.currentUser;
+
+  if (!isApprove && !confirm("Reject this address change request?")) return;
+
+  try {
+    if (isApprove) {
+      const requestDoc = await db.collection("addressChangeRequests").doc(userId).get();
+      if (!requestDoc.exists) return;
+      const requestedAddress = requestDoc.data().requestedAddress;
+
+      const batch = db.batch();
+      batch.update(db.collection("users").doc(userId), { address: requestedAddress });
+      batch.update(db.collection("addressChangeRequests").doc(userId), {
+        status: "approved",
+        reviewedBy: admin.uid,
+        reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await batch.commit();
+    } else {
+      await db.collection("addressChangeRequests").doc(userId).update({
+        status: "rejected",
+        reviewedBy: admin.uid,
+        reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  } catch (err) {
+    console.error("Failed to update address request:", err);
+    alert("Failed to update the request.");
+  }
+});
+
+
+/* =========================
    ADMIN – MESSAGES (admin-messages.html)
    ========================= */
 
@@ -1794,7 +2020,7 @@ if (idApplicationsList) {
       // Only show users who've completed their profile (have ID-relevant data)
       const applicants = snapshot.docs.filter((doc) => {
         const u = doc.data();
-        return u.address && u.birthdate && u.contactNumber && u.photoData;
+        return u.address && u.birthdate && u.contactNumber && u.photoData && u.idDocumentData;
       });
 
       if (applicants.length === 0) {
@@ -1824,6 +2050,12 @@ if (idApplicationsList) {
             <p class="event-meta">${app.address || ""}</p>
             <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
             ${app.idNumber ? `<p class="event-meta"><strong>${app.idNumber}</strong></p>` : ""}
+
+            ${app.idDocumentData ? `
+              <p class="event-meta">Submitted ID (verify against details above):</p>
+              <img class="id-app-photo" src="${app.idDocumentData}" alt="Submitted ID for ${app.fullName || ""}"
+                style="width:100%; height:auto; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
+            ` : ""}
 
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
@@ -2161,6 +2393,137 @@ if (chatThread) {
 
 
 /* =========================
+   USER DASHBOARD – COVER BANNER (user-uploaded)
+   ========================= */
+
+const dashboardBanner = document.getElementById("dashboardBanner");
+const changeBannerBtn = document.getElementById("changeBannerBtn");
+const bannerFileInput = document.getElementById("bannerFileInput");
+
+if (dashboardBanner) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      if (doc.exists && doc.data().bannerData) {
+        dashboardBanner.style.backgroundImage = `url(${doc.data().bannerData})`;
+      }
+    } catch (err) {
+      console.error("Failed to load banner:", err);
+    }
+  });
+}
+
+changeBannerBtn?.addEventListener("click", () => {
+  bannerFileInput?.click();
+});
+
+bannerFileInput?.addEventListener("change", async () => {
+  const file = bannerFileInput.files[0];
+  if (!file) return;
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  changeBannerBtn.textContent = "…";
+
+  try {
+    // Banners are wider than a profile photo but the same technique applies —
+    // resize + re-encode so it stays well under the Firestore doc size cap.
+    const bannerDataUrl = await compressImageToDataUrl(file, 900, 0.75);
+
+    await db.collection("users").doc(user.uid).update({
+      bannerData: bannerDataUrl
+    });
+
+    dashboardBanner.style.backgroundImage = `url(${bannerDataUrl})`;
+  } catch (err) {
+    console.error("Banner upload failed:", err);
+    alert("Couldn't update your cover photo. Please try again.");
+  } finally {
+    changeBannerBtn.textContent = "📷";
+  }
+});
+
+
+/* =========================
+   USER DASHBOARD – "WHAT'S ON YOUR MIND" STATUS
+   ========================= */
+
+const statusWidget = document.getElementById("statusWidget");
+
+function renderStatusDisplay(text) {
+  const hasText = !!text;
+  statusWidget.innerHTML = `
+    <div class="status-display" data-role="status-display">
+      <span class="status-display-text ${hasText ? "" : "placeholder"}">
+        ${hasText ? text : "What's on your mind?"}
+      </span>
+      <span class="quick-access-icon" style="font-size:14px;">✏️</span>
+    </div>
+  `;
+}
+
+function renderStatusEditor(currentText) {
+  statusWidget.innerHTML = `
+    <form id="statusEditForm" class="status-input-row">
+      <input id="statusEditInput" type="text" maxlength="140"
+        placeholder="What's on your mind?" value="${currentText ? currentText.replace(/"/g, "&quot;") : ""}">
+      <button type="submit" class="submit-btn">Post</button>
+    </form>
+  `;
+
+  const input = document.getElementById("statusEditInput");
+  input.focus();
+
+  document.getElementById("statusEditForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const newText = input.value.trim();
+
+    try {
+      await db.collection("users").doc(user.uid).update({
+        statusText: newText,
+        statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      renderStatusDisplay(newText);
+    } catch (err) {
+      console.error("Failed to post status:", err);
+      alert("Couldn't post that right now. Please try again.");
+    }
+  });
+}
+
+if (statusWidget) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      const text = doc.exists ? (doc.data().statusText || "") : "";
+      renderStatusDisplay(text);
+    } catch (err) {
+      console.error("Failed to load status:", err);
+      renderStatusDisplay("");
+    }
+  });
+
+  statusWidget.addEventListener("click", (e) => {
+    const display = e.target.closest('[data-role="status-display"]');
+    if (!display) return;
+
+    const currentText = display.querySelector(".status-display-text").textContent.trim();
+    const isPlaceholder = display.querySelector(".status-display-text").classList.contains("placeholder");
+    renderStatusEditor(isPlaceholder ? "" : currentText);
+  });
+}
+
+
+/* =========================
    USER DASHBOARD – MESSAGES HEADER ICON
    ========================= */
 
@@ -2268,6 +2631,159 @@ document.addEventListener("click", async (e) => {
     btn.textContent = originalText;
   }
 });
+
+
+/* =========================
+   PROFILE – DETAILS FORM (fullName/birthdate/contactNumber, self-editable)
+   ========================= */
+
+const profileDetailsForm = document.getElementById("profileDetailsForm");
+const profileDetailsError = document.getElementById("profileDetailsError");
+const profileDetailsSubmitBtn = document.getElementById("profileDetailsSubmitBtn");
+
+if (profileDetailsForm) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const doc = await db.collection("users").doc(user.uid).get();
+      if (!doc.exists) return;
+
+      const data = doc.data();
+      pdFullName.value = data.fullName || "";
+      pdBirthdate.value = data.birthdate || "";
+      pdContactNumber.value = data.contactNumber || "";
+    } catch (err) {
+      console.error("Failed to load profile details:", err);
+    }
+  });
+}
+
+profileDetailsForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  profileDetailsError?.classList.add("hidden");
+
+  const user = auth.currentUser;
+  if (!user) return;
+
+  profileDetailsSubmitBtn.disabled = true;
+  profileDetailsSubmitBtn.textContent = "Saving…";
+
+  try {
+    await db.collection("users").doc(user.uid).update({
+      fullName: pdFullName.value.trim(),
+      birthdate: pdBirthdate.value,
+      contactNumber: pdContactNumber.value.trim()
+    });
+
+    alert("Profile updated.");
+  } catch (err) {
+    console.error("Failed to save profile details:", err);
+    profileDetailsError.textContent = "Something went wrong. Please try again.";
+    profileDetailsError.classList.remove("hidden");
+  } finally {
+    profileDetailsSubmitBtn.disabled = false;
+    profileDetailsSubmitBtn.textContent = "Save Changes";
+  }
+});
+
+
+/* =========================
+   PROFILE – ADDRESS (admin-approved change requests)
+   ========================= */
+
+const addressSection = document.getElementById("addressSection");
+
+function renderAddressDisplay(currentAddress) {
+  addressSection.innerHTML = `
+    <p class="event-meta">${currentAddress || "Not set"}</p>
+    <button type="button" class="action-card small" data-role="request-address-change">
+      Request Address Change
+    </button>
+  `;
+}
+
+function renderAddressPending(currentAddress, requestedAddress) {
+  addressSection.innerHTML = `
+    <p class="event-meta">Current: ${currentAddress || "Not set"}</p>
+    <p class="dashboard-subtext">
+      Requested: <strong>${requestedAddress}</strong> — pending admin approval
+    </p>
+  `;
+}
+
+function renderAddressEditor(currentAddress) {
+  addressSection.innerHTML = `
+    <form id="addressRequestForm" class="status-input-row">
+      <input id="addressRequestInput" type="text" placeholder="New address" value="${currentAddress ? currentAddress.replace(/"/g, "&quot;") : ""}" required>
+      <button type="submit" class="submit-btn">Submit</button>
+    </form>
+  `;
+
+  document.getElementById("addressRequestForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const requestedAddress = document.getElementById("addressRequestInput").value.trim();
+    if (!requestedAddress || requestedAddress === currentAddress) {
+      renderAddressDisplay(currentAddress);
+      return;
+    }
+
+    try {
+      await db.collection("addressChangeRequests").doc(user.uid).set({
+        userId: user.uid,
+        currentAddress: currentAddress || "",
+        requestedAddress,
+        status: "pending",
+        requestedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      renderAddressPending(currentAddress, requestedAddress);
+    } catch (err) {
+      console.error("Failed to submit address change request:", err);
+      alert("Couldn't submit that request. Please try again.");
+    }
+  });
+}
+
+if (addressSection) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    try {
+      const [userDoc, requestDoc] = await Promise.all([
+        db.collection("users").doc(user.uid).get(),
+        db.collection("addressChangeRequests").doc(user.uid).get()
+      ]);
+
+      const currentAddress = userDoc.exists ? (userDoc.data().address || "") : "";
+
+      if (requestDoc.exists && requestDoc.data().status === "pending") {
+        renderAddressPending(currentAddress, requestDoc.data().requestedAddress);
+      } else {
+        renderAddressDisplay(currentAddress);
+      }
+    } catch (err) {
+      console.error("Failed to load address status:", err);
+      addressSection.innerHTML = '<p class="dashboard-subtext">Couldn\'t load address.</p>';
+    }
+  });
+
+  addressSection.addEventListener("click", async (e) => {
+    const btn = e.target.closest('[data-role="request-address-change"]');
+    if (!btn) return;
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const doc = await db.collection("users").doc(user.uid).get();
+    const currentAddress = doc.exists ? (doc.data().address || "") : "";
+    renderAddressEditor(currentAddress);
+  });
+}
 
 
 /* =========================

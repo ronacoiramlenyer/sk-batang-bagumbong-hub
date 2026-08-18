@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Users</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container admin-events">
+
+    <section class="admin-section">
+      <div class="section-header">
+        <h2>Users</h2>
+      </div>
+      <p class="dashboard-subtext">
+        Full directory of registered accounts. Pending address change
+        requests show inline for review.
+      </p>
+
+      <div id="usersList" class="event-list">
+        <p class="dashboard-subtext">Loading…</p>
+      </div>
+    </section>
+
+    <!-- NAVIGATION -->
+    <div class="admin-nav">
+      <button type="button" class="action-card secondary"
+        onclick="window.location.href='admin.html'">
+        ← Back to Admin Panel
+      </button>
+    </div>
+
+    <!-- LOGOUT -->
+    <button id="logoutBtn" class="submit-btn logout">
+      Logout
+    </button>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- App Logic -->
+  <script src="app.js"></script>
+
+</body>
+</html>

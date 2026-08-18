@@ -43,6 +43,35 @@
       </div>
     </div>
 
+    <!-- PROFILE DETAILS -->
+    <div class="dashboard-section">
+      <h2 class="section-title">Profile Details</h2>
+
+      <form id="profileDetailsForm" class="admin-form">
+        <label>Full Name</label>
+        <input id="pdFullName" required>
+
+        <label>Birthdate</label>
+        <input id="pdBirthdate" type="date" required>
+
+        <label>Contact Number</label>
+        <input id="pdContactNumber" type="tel" required>
+
+        <div id="profileDetailsError" class="form-error hidden"></div>
+
+        <button type="submit" id="profileDetailsSubmitBtn" class="submit-btn">
+          Save Changes
+        </button>
+      </form>
+
+      <div class="dashboard-section" style="margin-top:18px;">
+        <h2 class="section-title" style="font-size:13px;">Address</h2>
+        <div id="addressSection">
+          <p class="dashboard-subtext">Loading…</p>
+        </div>
+      </div>
+    </div>
+
     <span class="back-link" onclick="window.location.href='dashboard.html'">← Back to Dashboard</span>
 
     <!-- LOGOUT -->
