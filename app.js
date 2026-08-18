@@ -121,6 +121,19 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 /* =========================
+   AUTH HELPER
+   ========================= */
+
+function waitForUser() {
+  return new Promise((resolve) => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+}
+
+/* =========================
    LOGOUT (dashboard/admin)
    ========================= */
 
@@ -253,6 +266,14 @@ if (adminEventList) {
                 title="Archive Event">
                 🗄️
                 <span>Archive</span>
+              </button>
+
+              <button class="icon-btn registrants"
+                data-id="${doc.id}"
+                data-title="${event.title}"
+                title="View Registrants">
+                🧾
+                <span>Registrants</span>
               </button>
             </div>
 
@@ -446,53 +467,220 @@ if (confirmArchiveBtn) {
 
 
 /* =========================
+   ADMIN – REGISTRANTS / ATTENDANCE
+   ========================= */
+
+const registrantsModal = document.getElementById("registrantsModal");
+const registrantsList = document.getElementById("registrantsList");
+const registrantsEventTitle = document.getElementById("registrantsEventTitle");
+const closeRegistrantsModal = document.getElementById("closeRegistrantsModal");
+const printRegistrantsBtn = document.getElementById("printRegistrantsBtn");
+
+let activeRegistrantsEventId = null;
+let registrantsUnsubscribe = null;
+
+// Open modal + live-listen to registrants for this event
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".icon-btn.registrants");
+  if (!btn) return;
+
+  activeRegistrantsEventId = btn.dataset.id;
+
+  if (registrantsEventTitle) {
+    registrantsEventTitle.textContent = btn.dataset.title || "";
+  }
+  if (registrantsList) {
+    registrantsList.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
+  }
+  registrantsModal?.classList.remove("hidden");
+
+  if (registrantsUnsubscribe) registrantsUnsubscribe();
+
+  registrantsUnsubscribe = db.collection("registrations")
+    .where("eventId", "==", activeRegistrantsEventId)
+    .onSnapshot((snapshot) => {
+      if (!registrantsList) return;
+      registrantsList.innerHTML = "";
+
+      if (snapshot.empty) {
+        registrantsList.innerHTML =
+          '<p class="dashboard-subtext">No registrants yet.</p>';
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const reg = doc.data();
+
+        const row = document.createElement("div");
+        row.className = "registrant-row";
+        row.innerHTML = `
+          <div class="registrant-info">
+            <strong>${reg.fullName || "Unknown"}</strong>
+            <span class="event-meta">${reg.email || ""}</span>
+          </div>
+          <label class="attendance-toggle">
+            <input type="checkbox"
+              class="attendance-checkbox"
+              data-id="${doc.id}"
+              ${reg.attended ? "checked" : ""}>
+            Attended
+          </label>
+        `;
+
+        registrantsList.appendChild(row);
+      });
+    }, (err) => {
+      console.error("Failed to load registrants:", err);
+      if (registrantsList) {
+        registrantsList.innerHTML =
+          '<p class="dashboard-subtext">Failed to load registrants.</p>';
+      }
+    });
+});
+
+// Close modal
+closeRegistrantsModal?.addEventListener("click", () => {
+  registrantsModal?.classList.add("hidden");
+  if (registrantsUnsubscribe) {
+    registrantsUnsubscribe();
+    registrantsUnsubscribe = null;
+  }
+  activeRegistrantsEventId = null;
+});
+
+// Toggle attendance
+document.addEventListener("change", async (e) => {
+  const checkbox = e.target.closest(".attendance-checkbox");
+  if (!checkbox) return;
+
+  const registrationId = checkbox.dataset.id;
+  const attended = checkbox.checked;
+
+  try {
+    await db.collection("registrations").doc(registrationId).update({
+      attended,
+      checkedInAt: attended
+        ? firebase.firestore.FieldValue.serverTimestamp()
+        : null
+    });
+  } catch (err) {
+    console.error("Failed to update attendance:", err);
+    alert("Failed to update attendance.");
+    checkbox.checked = !attended; // revert on failure
+  }
+});
+
+// Print registrant list
+printRegistrantsBtn?.addEventListener("click", () => {
+  window.print();
+});
+
+
+/* =========================
    USER DASHBOARD – RENDER EVENTS
    ========================= */
 
 const userEventList = document.getElementById("userEventList");
 
+let myRegisteredEventIds = new Set();
 
+async function refreshMyRegistrations() {
+  const user = auth.currentUser;
+  if (!user) return;
 
+  const snap = await db.collection("registrations")
+    .where("userId", "==", user.uid)
+    .get();
 
+  myRegisteredEventIds = new Set(snap.docs.map((d) => d.data().eventId));
+}
 
 if (userEventList) {
+  waitForUser().then(async (user) => {
+    if (!user) return;
+
+    await refreshMyRegistrations();
+
     db.collection("events")
-    .where("status", "in", ["upcoming", "ongoing"])
-    .onSnapshot((snapshot) => {
+      .where("status", "in", ["upcoming", "ongoing"])
+      .onSnapshot((snapshot) => {
 
+        userEventList.innerHTML = "";
 
-      userEventList.innerHTML = "";
+        if (snapshot.empty) {
+          userEventList.innerHTML =
+            '<p class="dashboard-subtext">No upcoming events.</p>';
+          return;
+        }
 
-      if (snapshot.empty) {
-        userEventList.innerHTML =
-          '<p class="dashboard-subtext">No upcoming events.</p>';
-        return;
-      }
+        snapshot.forEach((doc) => {
+          const event = doc.data();
+          const isJoined = myRegisteredEventIds.has(doc.id);
 
-      snapshot.forEach((doc) => {
-        const event = doc.data();
+          const card = document.createElement("div");
+          card.className = "event-card";
 
-        const card = document.createElement("div");
-        card.className = "event-card";
+          card.innerHTML = `
+            <h3>${event.title}</h3>
+            <p class="event-meta">
+              📅 ${event.date} · 🕒 ${event.time}<br>
+              📍 ${event.location}
+            </p>
 
-        card.innerHTML = `
-          <h3>${event.title}</h3>
-          <p class="event-meta">
-            📅 ${event.date} · 🕒 ${event.time}<br>
-            📍 ${event.location}
-          </p>
+            <button type="button"
+              class="action-card small"
+              data-id="${doc.id}"
+              ${isJoined ? "disabled" : ""}>
+              ${isJoined ? "Joined ✓" : "Join Event"}
+            </button>
+          `;
 
-          <button type="button"
-            class="action-card small"
-            data-id="${doc.id}">
-            Join Event
-          </button>
-        `;
-
-        userEventList.appendChild(card);
+          userEventList.appendChild(card);
+        });
       });
-    });
+  });
 }
+
+// Join Event click handler
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".action-card.small[data-id]");
+  if (!btn || btn.disabled) return;
+  if (!userEventList || !userEventList.contains(btn)) return;
+
+  const eventId = btn.dataset.id;
+  const user = auth.currentUser;
+  if (!user) return;
+
+  btn.disabled = true;
+  btn.textContent = "Joining…";
+
+  try {
+    const userDoc = await db.collection("users").doc(user.uid).get();
+    const userData = userDoc.exists ? userDoc.data() : {};
+
+    // Deterministic ID (eventId_userId) — a second write attempt on an
+    // existing registration is blocked by security rules (only admins
+    // can update a registration), which prevents duplicate joins.
+    const registrationId = `${eventId}_${user.uid}`;
+
+    await db.collection("registrations").doc(registrationId).set({
+      eventId,
+      userId: user.uid,
+      fullName: userData.fullName || "",
+      email: userData.email || user.email || "",
+      attended: false,
+      registeredAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    myRegisteredEventIds.add(eventId);
+    btn.textContent = "Joined ✓";
+  } catch (err) {
+    console.error("Registration failed:", err);
+    alert("Could not register. You may already be registered, or something went wrong.");
+    btn.disabled = false;
+    btn.textContent = "Join Event";
+  }
+});
 
 
 /* =========================
