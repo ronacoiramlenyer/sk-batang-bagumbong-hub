@@ -5,7 +5,8 @@
 firebase.initializeApp({
   apiKey: "AIzaSyC95JDUah7EnuqU51vOoqXDsmCSoqk3WkI",
   authDomain: "sk-web-dev-41979.firebaseapp.com",
-  projectId: "sk-web-dev-41979"
+  projectId: "sk-web-dev-41979",
+  storageBucket: "sk-web-dev-41979.firebasestorage.app"
 });
 
 const auth = firebase.auth();
