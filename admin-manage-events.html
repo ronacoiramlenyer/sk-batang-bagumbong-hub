@@ -7,76 +7,6 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 
-<!-- STATUS CHANGE MODAL -->
-<div id="statusModal" class="modal hidden">
-  <div class="modal-content">
-    <h3>Change Event Status</h3>
-    <p id="currentStatusText"></p>
-
-    <div class="status-options">
-      <button class="status-option" data-status="upcoming">Upcoming</button>
-      <button class="status-option" data-status="ongoing">Ongoing</button>
-      <button class="status-option" data-status="completed">Completed</button>
-      <button class="status-option danger" data-status="archived">Archived</button>
-    </div>
-
-    <button id="closeStatusModal" class="back-link">Cancel</button>
-  </div>
-</div>
-
-<!-- EDIT EVENT MODAL -->
-<div id="editEventModal" class="modal hidden">
-  <div class="modal-content">
-    <h3>Edit Event</h3>
-
-    <form id="editEventForm">
-
-      <label>Event Title</label>
-      <input type="text" id="editTitle" required>
-
-      <label>Description</label>
-      <textarea id="editDescription" rows="4"></textarea>
-
-      <label>Date</label>
-      <input type="date" id="editDate" required>
-
-      <label>Time</label>
-      <input type="time" id="editTime" required>
-
-      <label>Location</label>
-      <input type="text" id="editLocation" required>
-
-      <button type="submit" class="submit-btn">
-        Save Changes
-      </button>
-
-      <span id="closeEditModal" class="back-link">Cancel</span>
-    </form>
-  </div>
-</div>
-
-
-<!-- ARCHIVE EVENT MODAL -->
-<div id="archiveEventModal" class="modal hidden">
-  <div class="modal-content">
-    <h3>Archive Event</h3>
-    <p>
-      This event will be hidden from users.<br>
-      You can still view it in the admin panel.
-    </p>
-
-    <button id="confirmArchiveBtn" class="submit-btn">
-      Archive Event
-    </button>
-
-    <span id="cancelArchiveBtn" class="back-link">
-      Cancel
-    </span>
-  </div>
-</div>
-
-
-
 <body>
 
   <div class="app-container admin-events">
@@ -96,8 +26,72 @@
 
     </section>
 
+    <!-- STATUS CHANGE MODAL -->
+    <div id="statusModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Change Event Status</h3>
+        <p id="currentStatusText"></p>
 
+        <div class="status-options">
+          <button class="status-option" data-status="upcoming">Upcoming</button>
+          <button class="status-option" data-status="ongoing">Ongoing</button>
+          <button class="status-option" data-status="completed">Completed</button>
+          <button class="status-option danger" data-status="archived">Archived</button>
+        </div>
 
+        <button id="closeStatusModal" class="back-link">Cancel</button>
+      </div>
+    </div>
+
+    <!-- EDIT EVENT MODAL -->
+    <div id="editEventModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Edit Event</h3>
+
+        <form id="editEventForm">
+
+          <label>Event Title</label>
+          <input type="text" id="editTitle" required>
+
+          <label>Description</label>
+          <textarea id="editDescription" rows="4"></textarea>
+
+          <label>Date</label>
+          <input type="date" id="editDate" required>
+
+          <label>Time</label>
+          <input type="time" id="editTime" required>
+
+          <label>Location</label>
+          <input type="text" id="editLocation" required>
+
+          <button type="submit" class="submit-btn">
+            Save Changes
+          </button>
+
+          <span id="closeEditModal" class="back-link">Cancel</span>
+        </form>
+      </div>
+    </div>
+
+    <!-- ARCHIVE EVENT MODAL -->
+    <div id="archiveEventModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Archive Event</h3>
+        <p>
+          This event will be hidden from users.<br>
+          You can still view it in the admin panel.
+        </p>
+
+        <button id="confirmArchiveBtn" class="submit-btn">
+          Archive Event
+        </button>
+
+        <span id="cancelArchiveBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
 
 
 

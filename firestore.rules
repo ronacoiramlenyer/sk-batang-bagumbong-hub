@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the request from a logged-in user?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: is the request from the owner of this doc (by uid)?
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Helper: is the request from a user whose role == 'admin'?
+    // Reads the requester's own /users/{uid} doc to check their role.
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------------------------
+    // users/{userId}
+    // ---------------------------
+    match /users/{userId} {
+      // A user can read/write only their own profile.
+      // Admins can read any profile (needed for admin views).
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      // Prevent users from changing their own role (privilege escalation).
+      allow update: if isOwner(userId) &&
+        request.resource.data.role == resource.data.role;
+      // Admins can update any user doc, including role assignment.
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------
+    // events/{eventId}
+    // ---------------------------
+    match /events/{eventId} {
+      // Any signed-in user can read events.
+      allow read: if isSignedIn();
+      // Only admins can create, edit, or change status/archive events.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---------------------------
+    // registrations/{registrationId}
+    // ---------------------------
+    match /registrations/{registrationId} {
+      // A user can read their own registrations; admins can read all
+      // (needed for registrant lists / attendance / printing).
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // A user can only create a registration for themselves.
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Only admins can update (e.g. marking attendance).
+      allow update: if isAdmin();
+
+      // No deletes from the client — keep registrations as a permanent record.
+      allow delete: if false;
+    }
+
+    // Default deny for anything not explicitly matched above
+    // (announcements, idApplications, certificates, conversations, etc.
+    // will need their own rules blocks as those features are built).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
