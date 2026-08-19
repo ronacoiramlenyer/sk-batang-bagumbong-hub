@@ -2760,78 +2760,59 @@ bannerFileInput?.addEventListener("change", async () => {
 
 
 /* =========================
-   USER DASHBOARD – "WHAT'S ON YOUR MIND" STATUS
+   USER DASHBOARD – MOTIVATIONAL QUOTE (read-only)
    ========================= */
 
 const statusWidget = document.getElementById("statusWidget");
 
-function renderStatusDisplay(text) {
-  const hasText = !!text;
-  statusWidget.innerHTML = `
-    <div class="status-display" data-role="status-display">
-      <span class="status-display-text ${hasText ? "" : "placeholder"}">
-        ${hasText ? text : "What's on your mind?"}
-      </span>
-      <span class="quick-access-icon" style="font-size:14px;">✏️</span>
-    </div>
-  `;
-}
-
-function renderStatusEditor(currentText) {
-  statusWidget.innerHTML = `
-    <form id="statusEditForm" class="status-input-row">
-      <input id="statusEditInput" type="text" maxlength="140"
-        placeholder="What's on your mind?" value="${currentText ? currentText.replace(/"/g, "&quot;") : ""}">
-      <button type="submit" class="submit-btn">Post</button>
-    </form>
-  `;
-
-  const input = document.getElementById("statusEditInput");
-  input.focus();
-
-  document.getElementById("statusEditForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const newText = input.value.trim();
-
-    try {
-      await db.collection("users").doc(user.uid).update({
-        statusText: newText,
-        statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      renderStatusDisplay(newText);
-    } catch (err) {
-      console.error("Failed to post status:", err);
-      alert("Couldn't post that right now. Please try again.");
-    }
-  });
-}
+const MOTIVATIONAL_QUOTES = [
+"Your age does not limit the impact you can make.",
+"Be young, be bold, be a force for good.",
+"Your ideas can inspire change in your community.",
+"Leadership begins when you choose to take action.",
+"Don't wait for change — be part of making it happen.",
+"Your talents are gifts meant to be shared.",
+"Every young person has the power to make a difference.",
+"Believe in yourself, then help others believe in themselves.",
+"Stand up, speak out, and make your voice count.",
+"Your future is built by what you do today.",
+"Be the youth who inspires others to dream bigger.",
+"Success is not just about achievement — it's about impact.",
+"Lead by example, even when no one is watching.",
+"Your community needs your energy, ideas, and courage.",
+"Turn your passion into purpose.",
+"Learn today, lead tomorrow, serve always.",
+"Don't underestimate what young minds can accomplish.",
+"Every good action creates a ripple of change.",
+"Use your time, talent, and voice to uplift others.",
+"Strong communities begin with young people who care.",
+"Your dreams can become your community's inspiration.",
+"Choose courage over comfort.",
+"Be a reason someone believes in a better tomorrow.",
+"Start where you are, use what you have, and make a difference.",
+"Young minds. Brave hearts. Better communities.",
+"Your potential is greater than your doubts.",
+"Make your youth count — create, serve, and lead.",
+"Change begins with one person deciding to care.",
+"Don't just be a member of the community — help shape it.",
+"The future belongs to those who prepare for it today.",
+"Your small act of kindness may become someone's biggest hope.",
+"Rise together, grow together, succeed together.",
+"Be proud of where you come from and help make it better.",
+"Leadership is not a position; it is a choice to serve.",
+"Your generation has the power to write a new story.",
+"Dream with ambition, act with courage, serve with compassion.",
+"Make your voice heard, but let your actions speak louder.",
+"One young person with purpose can inspire an entire community.",
+"Your future is waiting — start building it today.",
+"Be the spark that inspires positive change."
+];
 
 if (statusWidget) {
-  waitForUser().then(async (user) => {
-    if (!user) return;
-
-    try {
-      const doc = await db.collection("users").doc(user.uid).get();
-      const text = doc.exists ? (doc.data().statusText || "") : "";
-      renderStatusDisplay(text);
-    } catch (err) {
-      console.error("Failed to load status:", err);
-      renderStatusDisplay("");
-    }
-  });
-
-  statusWidget.addEventListener("click", (e) => {
-    const display = e.target.closest('[data-role="status-display"]');
-    if (!display) return;
-
-    const currentText = display.querySelector(".status-display-text").textContent.trim();
-    const isPlaceholder = display.querySelector(".status-display-text").classList.contains("placeholder");
-    renderStatusEditor(isPlaceholder ? "" : currentText);
-  });
+  const quote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  statusWidget.innerHTML = `
+    <span class="status-display-text">💭 ${quote}</span>
+  `;
 }
 
 
