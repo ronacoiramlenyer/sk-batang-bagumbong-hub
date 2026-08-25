@@ -13,6 +13,23 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 /* =========================
+   HTML ESCAPING (XSS PREVENTION)
+   Any Firestore-sourced text (names, addresses, messages, event/announcement
+   text, etc.) must go through this before being interpolated into an
+   innerHTML template — those fields are attacker-controllable and get
+   rendered inside other users' (including admins') authenticated sessions.
+   ========================= */
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[ch]));
+}
+
+/* =========================
    PAGE DETECTION
    ========================= */
 
@@ -44,6 +61,36 @@ loginForm?.addEventListener("submit", async (e) => {
   } catch (err) {
     loginError.textContent = "Incorrect email or password.";
     loginError.classList.remove("hidden");
+  }
+});
+
+/* =========================
+   FORGOT PASSWORD (index.html)
+   ========================= */
+
+const forgotPasswordForm = document.getElementById("forgotPasswordForm");
+const forgotPasswordMessage = document.getElementById("forgotPasswordMessage");
+const forgotPasswordSubmitBtn = document.getElementById("forgotPasswordSubmitBtn");
+
+forgotPasswordForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const email = document.getElementById("forgotPasswordEmail").value.trim();
+  forgotPasswordSubmitBtn.disabled = true;
+
+  // Always show the same confirmation regardless of whether the email is
+  // registered — prevents using this form to check which emails have
+  // accounts (user enumeration).
+  try {
+    await auth.sendPasswordResetEmail(email);
+  } catch (err) {
+    console.error("Password reset request failed:", err);
+  } finally {
+    forgotPasswordMessage.textContent =
+      "If an account exists for that email, a password reset link has been sent.";
+    forgotPasswordMessage.classList.remove("form-error", "hidden");
+    forgotPasswordMessage.classList.add("form-success");
+    forgotPasswordSubmitBtn.disabled = false;
   }
 });
 
@@ -990,14 +1037,14 @@ if (adminAnnouncementList) {
         card.innerHTML = `
           <div class="collapsible-header" data-role="toggle-card">
             <div class="collapsible-header-text">
-              <h3>${announcement.title}</h3>
+              <h3>${escapeHtml(announcement.title)}</h3>
               ${announcement.pinned ? '<span class="status-badge status-ongoing">PINNED</span>' : ""}
             </div>
             <span class="collapsible-chevron">▾</span>
           </div>
 
           <div class="collapsible-body">
-            <p class="announcement-text">${announcement.body}</p>
+            <p class="announcement-text">${escapeHtml(announcement.body)}</p>
             <p class="event-meta">Posted ${formatAnnouncementDate(announcement.createdAt)}</p>
 
             <div class="admin-actions horizontal">
@@ -1152,7 +1199,7 @@ if (announcementList) {
         card.className = "announcement-card";
 
         card.innerHTML = `
-          <p class="announcement-text">${announcement.body}</p>
+          <p class="announcement-text">${escapeHtml(announcement.body)}</p>
           <span class="announcement-date">Posted ${formatAnnouncementDate(announcement.createdAt)}</span>
         `;
 
@@ -1200,7 +1247,7 @@ if (adminEventList) {
         card.innerHTML = `
           <div class="collapsible-header" data-role="toggle-card">
             <div class="collapsible-header-text">
-              <h3>${event.title}</h3>
+              <h3>${escapeHtml(event.title)}</h3>
               <span class="status-badge status-${displayStatus}">${displayStatus.toUpperCase()}</span>
             </div>
             <span class="collapsible-chevron">▾</span>
@@ -1208,10 +1255,10 @@ if (adminEventList) {
 
           <div class="collapsible-body">
             <p class="event-meta">
-              ${event.date} • ${event.time}
+              ${escapeHtml(event.date)} • ${escapeHtml(event.time)}
             </p>
             <p class="event-meta">
-              📍 ${event.location}
+              📍 ${escapeHtml(event.location)}
             </p>
 
             <div class="admin-actions horizontal">
@@ -1239,7 +1286,7 @@ if (adminEventList) {
 
               <button class="icon-btn registrants"
                 data-id="${doc.id}"
-                data-title="${event.title}"
+                data-title="${escapeHtml(event.title)}"
                 title="View Registrants">
                 🧾
                 <span>Registrants</span>
@@ -1497,8 +1544,8 @@ document.addEventListener("click", async (e) => {
         row.className = "registrant-row";
         row.innerHTML = `
           <div class="registrant-info">
-            <strong>${reg.fullName || "Unknown"}</strong>
-            <span class="event-meta">${reg.email || ""}</span>
+            <strong>${escapeHtml(reg.fullName || "Unknown")}</strong>
+            <span class="event-meta">${escapeHtml(reg.email || "")}</span>
           </div>
           <div class="registrant-actions">
             <label class="attendance-toggle">
@@ -1511,7 +1558,7 @@ document.addEventListener("click", async (e) => {
             <button type="button"
               class="cert-btn"
               data-role="generate-certificate"
-              data-fullname="${reg.fullName || ""}"
+              data-fullname="${escapeHtml(reg.fullName || "")}"
               ${reg.attended ? "" : "disabled"}
               title="${reg.attended ? "Generate certificate" : "Mark attended first"}">
               🎓 Certificate
@@ -1805,11 +1852,13 @@ if (usersList) {
       const card = document.createElement("div");
       card.className = "event-card admin-card collapsible-card";
 
+      const fullNameSafe = escapeHtml(u.fullName || "");
+
       card.innerHTML = `
         <div class="collapsible-header" data-role="toggle-card">
           <div class="collapsible-header-text">
-            ${u.photoData ? `<img class="id-app-thumb" src="${u.photoData}" alt="${u.fullName || ""}">` : ""}
-            <h3>${u.fullName || "Unknown"}</h3>
+            ${u.photoData ? `<img class="id-app-thumb" src="${u.photoData}" alt="${fullNameSafe}">` : ""}
+            <h3>${u.fullName ? fullNameSafe : "Unknown"}</h3>
             <span class="status-badge ${u.role === "admin" ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
               ${u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
             </span>
@@ -1819,27 +1868,27 @@ if (usersList) {
         </div>
 
         <div class="collapsible-body">
-          <p class="event-meta">${u.email || ""}</p>
-          <p class="event-meta">${u.address || "No address on file"}</p>
-          <p class="event-meta">🎂 ${u.birthdate || ""} · 📞 ${u.contactNumber || ""}</p>
-          ${u.idNumber ? `<p class="event-meta"><strong>${u.idNumber}</strong></p>` : ""}
+          <p class="event-meta">${escapeHtml(u.email || "")}</p>
+          <p class="event-meta">${escapeHtml(u.address || "No address on file")}</p>
+          <p class="event-meta">🎂 ${escapeHtml(u.birthdate || "")} · 📞 ${escapeHtml(u.contactNumber || "")}</p>
+          ${u.idNumber ? `<p class="event-meta"><strong>${escapeHtml(u.idNumber)}</strong></p>` : ""}
 
           ${u.idDocumentData ? `
             <p class="event-meta">Submitted ID:</p>
-            <img src="${u.idDocumentData}" alt="ID for ${u.fullName || ""}"
+            <img src="${u.idDocumentData}" alt="ID for ${fullNameSafe}"
               style="width:100%; height:auto; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
           ` : ""}
 
           ${pendingRequest ? `
             <p class="event-meta"><strong>Requested changes:</strong></p>
-            ${requested.fullName && requested.fullName !== u.fullName ? `<p class="dashboard-subtext">Name: ${u.fullName || "—"} → <strong>${requested.fullName}</strong></p>` : ""}
-            ${requested.birthdate && requested.birthdate !== u.birthdate ? `<p class="dashboard-subtext">Birthdate: ${u.birthdate || "—"} → <strong>${requested.birthdate}</strong></p>` : ""}
-            ${requested.contactNumber && requested.contactNumber !== u.contactNumber ? `<p class="dashboard-subtext">Contact: ${u.contactNumber || "—"} → <strong>${requested.contactNumber}</strong></p>` : ""}
-            ${requested.address && requested.address !== u.address ? `<p class="dashboard-subtext">Address: ${u.address || "—"} → <strong>${requested.address}</strong></p>` : ""}
+            ${requested.fullName && requested.fullName !== u.fullName ? `<p class="dashboard-subtext">Name: ${escapeHtml(u.fullName || "—")} → <strong>${escapeHtml(requested.fullName)}</strong></p>` : ""}
+            ${requested.birthdate && requested.birthdate !== u.birthdate ? `<p class="dashboard-subtext">Birthdate: ${escapeHtml(u.birthdate || "—")} → <strong>${escapeHtml(requested.birthdate)}</strong></p>` : ""}
+            ${requested.contactNumber && requested.contactNumber !== u.contactNumber ? `<p class="dashboard-subtext">Contact: ${escapeHtml(u.contactNumber || "—")} → <strong>${escapeHtml(requested.contactNumber)}</strong></p>` : ""}
+            ${requested.address && requested.address !== u.address ? `<p class="dashboard-subtext">Address: ${escapeHtml(u.address || "—")} → <strong>${escapeHtml(requested.address)}</strong></p>` : ""}
 
             ${pendingRequest.proofPhotoData ? `
               <p class="event-meta" style="margin-top:8px;">Proof submitted:</p>
-              <img src="${pendingRequest.proofPhotoData}" alt="Proof for ${u.fullName || ""}"
+              <img src="${pendingRequest.proofPhotoData}" alt="Proof for ${fullNameSafe}"
                 style="width:100%; height:auto; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
             ` : ""}
 
@@ -1855,6 +1904,17 @@ if (usersList) {
                 title="Reject Changes">
                 ❌
                 <span>Reject</span>
+              </button>
+            </div>
+          ` : ""}
+
+          ${u.role !== "admin" ? `
+            <div class="admin-actions horizontal">
+              <button class="icon-btn archive"
+                data-role="delete-user" data-id="${doc.id}" data-name="${fullNameSafe}"
+                title="Delete User">
+                🗑️
+                <span>Delete User</span>
               </button>
             </div>
           ` : ""}
@@ -1915,6 +1975,57 @@ if (usersList) {
     );
   });
 }
+
+
+/* =========================
+   ADMIN – DELETE USER (admin-manage-users.html)
+   Removes the user's Firestore profile/app data only — it does not touch
+   their Firebase Authentication account (the client SDK can't delete
+   another user's login; that needs the Admin SDK or the Firebase Console).
+   ========================= */
+
+const deleteUserModal = document.getElementById("deleteUserModal");
+const deleteUserNameEl = document.getElementById("deleteUserName");
+const confirmDeleteUserBtn = document.getElementById("confirmDeleteUserBtn");
+const cancelDeleteUserBtn = document.getElementById("cancelDeleteUserBtn");
+
+let deletingUserId = null;
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-role="delete-user"]');
+  if (!btn) return;
+
+  deletingUserId = btn.dataset.id;
+  if (deleteUserNameEl) deleteUserNameEl.textContent = btn.dataset.name || "this user";
+  deleteUserModal?.classList.remove("hidden");
+});
+
+cancelDeleteUserBtn?.addEventListener("click", () => {
+  deleteUserModal?.classList.add("hidden");
+  deletingUserId = null;
+});
+
+confirmDeleteUserBtn?.addEventListener("click", async () => {
+  if (!deletingUserId) return;
+
+  confirmDeleteUserBtn.disabled = true;
+
+  try {
+    await db.collection("users").doc(deletingUserId).delete();
+
+    // Best-effort cleanup of any pending profile change request tied to
+    // this user — not required for the deletion to succeed.
+    db.collection("profileChangeRequests").doc(deletingUserId).delete().catch(() => {});
+
+    deleteUserModal?.classList.add("hidden");
+    deletingUserId = null;
+  } catch (err) {
+    alert("Failed to delete user.");
+    console.error(err);
+  } finally {
+    confirmDeleteUserBtn.disabled = false;
+  }
+});
 
 // Approve / Reject a profile change request
 document.addEventListener("click", async (e) => {
@@ -2006,14 +2117,14 @@ if (conversationsList) {
         row.setAttribute("data-subject", thread.subject || "Conversation");
 
         row.innerHTML = `
-          <div class="convo-avatar">${initials || "?"}</div>
+          <div class="convo-avatar">${escapeHtml(initials || "?")}</div>
           <div class="convo-body">
             <div class="convo-top-line">
-              <span class="convo-name">${thread.subject || "Conversation"}</span>
+              <span class="convo-name">${escapeHtml(thread.subject || "Conversation")}</span>
               <span class="convo-time">${formatRelativeTime(thread.lastMessageAt)}</span>
               ${thread.unreadByAdmin ? '<span class="convo-dot"></span>' : ""}
             </div>
-            <p class="convo-preview">${name} · ${thread.lastMessageText || "No messages yet"}</p>
+            <p class="convo-preview">${escapeHtml(name)} · ${escapeHtml(thread.lastMessageText || "No messages yet")}</p>
           </div>
         `;
 
@@ -2153,24 +2264,26 @@ if (idApplicationsList) {
         const card = document.createElement("div");
         card.className = "event-card admin-card collapsible-card";
 
+        const appNameSafe = escapeHtml(app.fullName || "");
+
         card.innerHTML = `
           <div class="collapsible-header" data-role="toggle-card">
             <div class="collapsible-header-text">
-              ${app.photoData ? `<img class="id-app-thumb" src="${app.photoData}" alt="${app.fullName || ""}">` : ""}
-              <h3>${app.fullName || "Unknown"}</h3>
+              ${app.photoData ? `<img class="id-app-thumb" src="${app.photoData}" alt="${appNameSafe}">` : ""}
+              <h3>${app.fullName ? appNameSafe : "Unknown"}</h3>
               <span class="status-badge ${idStatusBadgeClass(status)}">${status.toUpperCase()}</span>
             </div>
             <span class="collapsible-chevron">▾</span>
           </div>
 
           <div class="collapsible-body">
-            <p class="event-meta">${app.address || ""}</p>
-            <p class="event-meta">🎂 ${app.birthdate || ""} · 📞 ${app.contactNumber || ""}</p>
-            ${app.idNumber ? `<p class="event-meta"><strong>${app.idNumber}</strong></p>` : ""}
+            <p class="event-meta">${escapeHtml(app.address || "")}</p>
+            <p class="event-meta">🎂 ${escapeHtml(app.birthdate || "")} · 📞 ${escapeHtml(app.contactNumber || "")}</p>
+            ${app.idNumber ? `<p class="event-meta"><strong>${escapeHtml(app.idNumber)}</strong></p>` : ""}
 
             ${app.idDocumentData ? `
               <p class="event-meta">Submitted ID (verify against details above):</p>
-              <img class="id-app-photo" src="${app.idDocumentData}" alt="Submitted ID for ${app.fullName || ""}"
+              <img class="id-app-photo" src="${app.idDocumentData}" alt="Submitted ID for ${appNameSafe}"
                 style="width:100%; height:auto; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
             ` : ""}
 
@@ -2353,10 +2466,10 @@ if (userEventList) {
           card.className = "event-card";
 
           card.innerHTML = `
-            <h3>${event.title}</h3>
+            <h3>${escapeHtml(event.title)}</h3>
             <p class="event-meta">
-              📅 ${event.date} · 🕒 ${event.time}<br>
-              📍 ${event.location}
+              📅 ${escapeHtml(event.date)} · 🕒 ${escapeHtml(event.time)}<br>
+              📍 ${escapeHtml(event.location)}
             </p>
 
             <button type="button"
@@ -2572,11 +2685,11 @@ if (threadsList) {
             <div class="convo-avatar">💬</div>
             <div class="convo-body">
               <div class="convo-top-line">
-                <span class="convo-name">${thread.subject || "Conversation"}</span>
+                <span class="convo-name">${escapeHtml(thread.subject || "Conversation")}</span>
                 <span class="convo-time">${formatRelativeTime(thread.lastMessageAt)}</span>
                 ${thread.unreadByUser ? '<span class="convo-dot"></span>' : ""}
               </div>
-              <p class="convo-preview">${thread.lastMessageText || "No messages yet"}</p>
+              <p class="convo-preview">${escapeHtml(thread.lastMessageText || "No messages yet")}</p>
             </div>
           `;
 
@@ -2886,7 +2999,7 @@ if (idApplicationStatusEl) {
         <div class="status-row-left">
           <span class="quick-access-icon">🪪</span>
           <span class="quick-access-label">SK ID: ${status.toUpperCase()}</span>
-          ${data.idNumber ? `<span class="dashboard-subtext">${data.idNumber}</span>` : ""}
+          ${data.idNumber ? `<span class="dashboard-subtext">${escapeHtml(data.idNumber)}</span>` : ""}
         </div>
         ${actionHtml}
       `;
@@ -2935,10 +3048,10 @@ const profileDetailsSection = document.getElementById("profileDetailsSection");
 
 function renderProfileDisplay(current) {
   profileDetailsSection.innerHTML = `
-    <p class="event-meta"><strong>Name:</strong> ${current.fullName || "Not set"}</p>
-    <p class="event-meta"><strong>Birthdate:</strong> ${current.birthdate || "Not set"}</p>
-    <p class="event-meta"><strong>Contact:</strong> ${current.contactNumber || "Not set"}</p>
-    <p class="event-meta"><strong>Address:</strong> ${current.address || "Not set"}</p>
+    <p class="event-meta"><strong>Name:</strong> ${escapeHtml(current.fullName || "Not set")}</p>
+    <p class="event-meta"><strong>Birthdate:</strong> ${escapeHtml(current.birthdate || "Not set")}</p>
+    <p class="event-meta"><strong>Contact:</strong> ${escapeHtml(current.contactNumber || "Not set")}</p>
+    <p class="event-meta"><strong>Address:</strong> ${escapeHtml(current.address || "Not set")}</p>
     <button type="button" class="action-card small" data-role="request-profile-change">
       Request a Change
     </button>
@@ -2948,15 +3061,15 @@ function renderProfileDisplay(current) {
 function renderProfilePending(current, requested) {
   profileDetailsSection.innerHTML = `
     <p class="dashboard-subtext">Your requested changes are pending admin approval:</p>
-    <p class="event-meta"><strong>Name:</strong> ${requested.fullName || current.fullName || ""}</p>
-    <p class="event-meta"><strong>Birthdate:</strong> ${requested.birthdate || current.birthdate || ""}</p>
-    <p class="event-meta"><strong>Contact:</strong> ${requested.contactNumber || current.contactNumber || ""}</p>
-    <p class="event-meta"><strong>Address:</strong> ${requested.address || current.address || ""}</p>
+    <p class="event-meta"><strong>Name:</strong> ${escapeHtml(requested.fullName || current.fullName || "")}</p>
+    <p class="event-meta"><strong>Birthdate:</strong> ${escapeHtml(requested.birthdate || current.birthdate || "")}</p>
+    <p class="event-meta"><strong>Contact:</strong> ${escapeHtml(requested.contactNumber || current.contactNumber || "")}</p>
+    <p class="event-meta"><strong>Address:</strong> ${escapeHtml(requested.address || current.address || "")}</p>
   `;
 }
 
 function renderProfileRequestForm(current) {
-  const esc = (v) => (v || "").replace(/"/g, "&quot;");
+  const esc = escapeHtml;
 
   profileDetailsSection.innerHTML = `
     <form id="profileChangeRequestForm" class="admin-form">
@@ -3133,14 +3246,14 @@ if (myCertificatesList) {
       const card = document.createElement("div");
       card.className = "event-card";
       card.innerHTML = `
-        <h3>${event.title}</h3>
-        <p class="event-meta">📅 ${event.date || ""}</p>
+        <h3>${escapeHtml(event.title)}</h3>
+        <p class="event-meta">📅 ${escapeHtml(event.date || "")}</p>
         <button type="button"
           class="action-card small"
           data-role="download-certificate"
-          data-fullname="${reg.fullName || ""}"
-          data-eventtitle="${event.title || ""}"
-          data-eventdate="${event.date || ""}">
+          data-fullname="${escapeHtml(reg.fullName || "")}"
+          data-eventtitle="${escapeHtml(event.title || "")}"
+          data-eventdate="${escapeHtml(event.date || "")}">
           Download Certificate
         </button>
       `;

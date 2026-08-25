@@ -66,7 +66,7 @@ The original plan ([ProjectDev.txt](ProjectDev.txt)) calls for two separate Fire
 
 ## Deploying
 
-This is a static site — there is no build step. To ship a change:
+**Workflow: GitHub → Netlify.** This repo is connected to a Netlify site; every push to `main` on GitHub triggers a Netlify auto-deploy of the current files (no manual upload to Netlify, no separate deploy command). This is a static site with no build step. To ship a change:
 
 1. Test against the Development Firebase project first (see above) if you've split dev/prod; otherwise test locally.
 2. If `firestore.rules` or `storage.rules` changed, publish them in the Firebase Console (or via `firebase deploy` if the CLI is configured — not currently set up in this repo).

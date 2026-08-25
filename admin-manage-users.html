@@ -29,6 +29,31 @@
       </div>
     </section>
 
+    <!-- DELETE USER MODAL -->
+    <div id="deleteUserModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Delete User</h3>
+        <p>
+          This will permanently remove <strong id="deleteUserName"></strong>'s
+          profile and app data (events, ID status, messages, etc. tied to
+          their account). This cannot be undone.
+        </p>
+        <p class="dashboard-subtext">
+          Note: this does not delete their login (email/password) — do that
+          separately in the Firebase Console if you also want to block them
+          from signing in.
+        </p>
+
+        <button id="confirmDeleteUserBtn" class="submit-btn">
+          Delete User
+        </button>
+
+        <span id="cancelDeleteUserBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
+
     <!-- NAVIGATION -->
     <div class="admin-nav">
       <button type="button" class="action-card secondary"

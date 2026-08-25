@@ -368,6 +368,20 @@ button:active {
   display: none;
 }
 
+.form-success {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #e6f4ea;
+  color: #1e7e34;
+  font-size: 14px;
+  text-align: center;
+}
+
+.form-success.hidden {
+  display: none;
+}
+
 
 /* =========================
    Event Description Textarea
@@ -783,6 +797,20 @@ button:active {
 }
 
 .form-error.hidden {
+  display: none;
+}
+
+.form-success {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #e6f4ea;
+  color: #1e7e34;
+  font-size: 14px;
+  text-align: center;
+}
+
+.form-success.hidden {
   display: none;
 }
 

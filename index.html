@@ -43,7 +43,30 @@
           Log In
         </button>
 
+        <span id="showForgotPasswordBtn" class="back-link">Forgot password?</span>
         <span id="backFromLogin" class="back-link">← Back</span>
+      </form>
+    </section>
+
+    <!-- FORGOT PASSWORD -->
+    <section id="forgotPasswordSection" hidden>
+      <form id="forgotPasswordForm">
+        <h2>Reset Password</h2>
+
+        <p class="dashboard-subtext">
+          Enter your account email and we'll send you a link to reset your password.
+        </p>
+
+        <label>Email</label>
+        <input id="forgotPasswordEmail" type="email" required>
+
+        <div id="forgotPasswordMessage" class="form-error hidden"></div>
+
+        <button type="submit" id="forgotPasswordSubmitBtn" class="submit-btn">
+          Send Reset Link
+        </button>
+
+        <span id="backFromForgotPassword" class="back-link">← Back to Log In</span>
       </form>
     </section>
 
@@ -106,6 +129,7 @@
     const welcome = document.getElementById("welcomeSection");
     const login = document.getElementById("loginSection");
     const register = document.getElementById("registerSection");
+    const forgotPassword = document.getElementById("forgotPasswordSection");
 
     document.getElementById("showLoginBtn").onclick = () => {
       welcome.hidden = true;
@@ -120,6 +144,16 @@
     document.getElementById("backFromLogin").onclick = () => {
       login.hidden = true;
       welcome.hidden = false;
+    };
+
+    document.getElementById("showForgotPasswordBtn").onclick = () => {
+      login.hidden = true;
+      forgotPassword.hidden = false;
+    };
+
+    document.getElementById("backFromForgotPassword").onclick = () => {
+      forgotPassword.hidden = true;
+      login.hidden = false;
     };
 
     document.getElementById("backFromRegister").onclick = () => {
