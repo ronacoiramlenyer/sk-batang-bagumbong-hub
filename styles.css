@@ -1859,7 +1859,7 @@ textarea {
   margin: -16px auto 22px auto;
   background: #fff3e0;
   border: 1px solid rgba(245, 124, 0, 0.28);
-  border-radius: 999px;
+  border-radius: 22px;
   padding: 8px 18px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.18);
   z-index: 2;
@@ -1924,9 +1924,9 @@ textarea {
 .status-display-text {
   font-size: 14px;
   color: var(--dark);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .status-display-text.placeholder {
