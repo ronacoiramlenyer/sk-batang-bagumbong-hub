@@ -271,8 +271,14 @@ auth.onAuthStateChanged(async (user) => {
 
   // 🚫 Incomplete profile — required for ID-relevant pages, not for
   // complete-profile.html itself (or the site would redirect in a loop).
+  // Admins are exempt: that page collects the photo/ID needed for a
+  // resident's SK Barangay ID application, and admin accounts are created
+  // by hand in Firestore rather than through registration, so they never
+  // have (or need) that data on file — without this exemption every admin
+  // login gets bounced to "Complete Your Profile" instead of the admin panel.
   const needsCompleteProfile = AUTH_REQUIRED_PAGES.includes(pageName) &&
     pageName !== "complete-profile.html" &&
+    role !== "admin" &&
     !isProfileComplete(userData);
 
   if (needsCompleteProfile) {
