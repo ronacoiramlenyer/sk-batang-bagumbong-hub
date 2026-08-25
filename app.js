@@ -780,7 +780,10 @@ function downloadCanvasAsPng(canvas, filename) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(link.href);
+    // Revoking immediately can race with the browser handing the file off
+    // to its download manager (seen in the wild as "nothing downloads" on
+    // some desktop browsers) — give it a beat first.
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }, "image/png");
 }
 
@@ -820,7 +823,9 @@ function downloadCsv(filename, headers, rows) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(link.href);
+  // See downloadCanvasAsPng — revoking immediately can race with the
+  // browser actually starting the download.
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 
