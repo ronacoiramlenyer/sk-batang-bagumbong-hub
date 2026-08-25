@@ -830,20 +830,29 @@ function downloadCsv(filename, headers, rows) {
 
 const ID_TEMPLATE_DOC = db.collection("settings").doc("idTemplate");
 
-// Same idea as CERT_TEXT_CONFIG — percentages of the template's width/height,
-// so it scales with whatever size template gets uploaded. Adjust these once
-// a real ID template exists and text/photo placement needs fine-tuning.
+// Percentages of the template's width/height, so it scales with whatever
+// size template gets uploaded. Colors are sampled directly from the actual
+// uploaded template: navy matches the chairperson signature-block text,
+// orange matches the "KATIPUNAN NG KABATAAN" banner.
+const ID_THEME_NAVY = "#083D63";
+const ID_THEME_ORANGE = "#FA8F2F";
+
 const ID_TEXT_CONFIG = {
-  name:      { xPct: 0.5, yPct: 0.62, fontPct: 0.032, weight: "bold",   color: "#1c1c1c" },
-  address:   { xPct: 0.5, yPct: 0.70, fontPct: 0.020, weight: "normal", color: "#333333" },
-  birthdate: { xPct: 0.5, yPct: 0.76, fontPct: 0.018, weight: "normal", color: "#333333" },
-  contact:   { xPct: 0.5, yPct: 0.82, fontPct: 0.018, weight: "normal", color: "#333333" },
-  idNumber:  { xPct: 0.5, yPct: 0.90, fontPct: 0.020, weight: "bold",   color: "#1c1c1c" }
+  name:      { xPct: 0.5, yPct: 0.60,  fontPct: 0.050, minFontPct: 0.026, maxWidthPct: 0.86, weight: "bold",   color: ID_THEME_NAVY },
+  address:   { xPct: 0.5, yPct: 0.645, fontPct: 0.021, minFontPct: 0.014, maxWidthPct: 0.88, weight: "normal", color: ID_THEME_NAVY, label: "Address: " },
+  birthdate: { xPct: 0.5, yPct: 0.660, fontPct: 0.021, minFontPct: 0.014, maxWidthPct: 0.88, weight: "normal", color: ID_THEME_NAVY, label: "Birthdate: " },
+  contact:   { xPct: 0.5, yPct: 0.674, fontPct: 0.021, minFontPct: 0.014, maxWidthPct: 0.88, weight: "normal", color: ID_THEME_NAVY, label: "Contact: " },
+  idNumber:  { xPct: 0.5, yPct: 0.703, fontPct: 0.025, minFontPct: 0.018, maxWidthPct: 0.7,  weight: "bold",   color: ID_THEME_NAVY, label: "ID No. " }
 };
 
-// Photo placement, also as a fraction of the template's dimensions
-// (box position + size, not just a point).
-const ID_PHOTO_CONFIG = { xPct: 0.5, yPct: 0.30, widthPct: 0.30, heightPct: 0.30 };
+// Photo placement: a circle (center + diameter, as fractions of the
+// template's dimensions), with an outline drawn with a drop shadow so it
+// reads as floating above the card rather than flat against it.
+const ID_PHOTO_CONFIG = {
+  xPct: 0.5, yPct: 0.42, diameterPct: 0.45,
+  outlineColor: ID_THEME_ORANGE, outlineWidthPct: 0.014,
+  shadowColor: "rgba(0,0,0,0.35)", shadowBlurPct: 0.02, shadowOffsetYPct: 0.008
+};
 
 async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate, contactNumber, idNumber }) {
   const doc = await ID_TEMPLATE_DOC.get();
@@ -861,42 +870,69 @@ async function generateIdCardCanvas({ photoDataUrl, fullName, address, birthdate
 
   if (photoDataUrl) {
     const photoImg = await loadImageFromUrl(photoDataUrl);
-    const boxWidth = ID_PHOTO_CONFIG.widthPct * canvas.width;
-    const boxHeight = ID_PHOTO_CONFIG.heightPct * canvas.height;
-    const boxX = ID_PHOTO_CONFIG.xPct * canvas.width - boxWidth / 2;
-    const boxY = ID_PHOTO_CONFIG.yPct * canvas.height - boxHeight / 2;
+    const diameter = ID_PHOTO_CONFIG.diameterPct * canvas.width;
+    const radius = diameter / 2;
+    const cx = ID_PHOTO_CONFIG.xPct * canvas.width;
+    const cy = ID_PHOTO_CONFIG.yPct * canvas.height;
 
-    // Cover-fit the photo into its box without distorting aspect ratio
+    // Cover-fit (crop to a square) so the photo isn't distorted inside the circle
     const photoRatio = photoImg.naturalWidth / photoImg.naturalHeight;
-    const boxRatio = boxWidth / boxHeight;
     let sx = 0, sy = 0, sw = photoImg.naturalWidth, sh = photoImg.naturalHeight;
-
-    if (photoRatio > boxRatio) {
-      sw = sh * boxRatio;
+    if (photoRatio > 1) {
+      sw = sh;
       sx = (photoImg.naturalWidth - sw) / 2;
     } else {
-      sh = sw / boxRatio;
+      sh = sw;
       sy = (photoImg.naturalHeight - sh) / 2;
     }
 
-    ctx.drawImage(photoImg, sx, sy, sw, sh, boxX, boxY, boxWidth, boxHeight);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(photoImg, sx, sy, sw, sh, cx - radius, cy - radius, diameter, diameter);
+    ctx.restore();
+
+    // Outline drawn separately (outside the clip) with a drop shadow.
+    ctx.save();
+    ctx.shadowColor = ID_PHOTO_CONFIG.shadowColor;
+    ctx.shadowBlur = ID_PHOTO_CONFIG.shadowBlurPct * canvas.width;
+    ctx.shadowOffsetY = ID_PHOTO_CONFIG.shadowOffsetYPct * canvas.height;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.lineWidth = ID_PHOTO_CONFIG.outlineWidthPct * canvas.width;
+    ctx.strokeStyle = ID_PHOTO_CONFIG.outlineColor;
+    ctx.stroke();
+    ctx.restore();
   }
 
-  function drawLine(text, cfg) {
+  // Draws text centered at cfg's position, shrinking the font (down to
+  // minFontPct) if it would otherwise overflow maxWidthPct of the card —
+  // keeps a long name/address from spilling off the edge.
+  function drawFittedText(text, cfg) {
     if (!text) return;
-    const fontSize = Math.round(cfg.fontPct * canvas.width);
-    ctx.font = `${cfg.weight} ${fontSize}px system-ui, sans-serif`;
-    ctx.fillStyle = cfg.color;
+    const maxWidth = (cfg.maxWidthPct ?? 0.86) * canvas.width;
+    const minFontSize = Math.round((cfg.minFontPct ?? cfg.fontPct) * canvas.width);
+    let fontSize = Math.round(cfg.fontPct * canvas.width);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    let width;
+    do {
+      ctx.font = `${cfg.weight} ${fontSize}px system-ui, sans-serif`;
+      width = ctx.measureText(text).width;
+      if (width <= maxWidth || fontSize <= minFontSize) break;
+      fontSize -= 1;
+    } while (true);
+    ctx.fillStyle = cfg.color;
     ctx.fillText(text, cfg.xPct * canvas.width, cfg.yPct * canvas.height);
   }
 
-  drawLine(fullName, ID_TEXT_CONFIG.name);
-  drawLine(address, ID_TEXT_CONFIG.address);
-  drawLine(birthdate, ID_TEXT_CONFIG.birthdate);
-  drawLine(contactNumber, ID_TEXT_CONFIG.contact);
-  drawLine(idNumber, ID_TEXT_CONFIG.idNumber);
+  drawFittedText(fullName, ID_TEXT_CONFIG.name);
+  drawFittedText(address ? ID_TEXT_CONFIG.address.label + address : "", ID_TEXT_CONFIG.address);
+  drawFittedText(birthdate ? ID_TEXT_CONFIG.birthdate.label + birthdate : "", ID_TEXT_CONFIG.birthdate);
+  drawFittedText(contactNumber ? ID_TEXT_CONFIG.contact.label + contactNumber : "", ID_TEXT_CONFIG.contact);
+  drawFittedText(idNumber ? ID_TEXT_CONFIG.idNumber.label + idNumber : "", ID_TEXT_CONFIG.idNumber);
 
   return canvas;
 }
@@ -2355,9 +2391,22 @@ if (idApplicationsList) {
     });
 }
 
-// Assigns the next serial ID number (e.g. SK-2026-0007) using a
-// transaction against a shared counter doc, so concurrent approvals
-// can't collide on the same number. Targets the user's own profile doc.
+// Turns a sequential counter (1, 2, 3, ...) into a 6-digit code that doesn't
+// look sequential — e.g. counter 7 becomes "700006", not "000007" — without
+// giving up the counter's atomicity guarantee. This is a fixed multiplicative
+// permutation over 0..899999 (SCRAMBLE_MULTIPLIER is coprime with
+// SCRAMBLE_RANGE), so distinct counters always map to distinct codes; there's
+// no collision risk to check for, and no separate uniqueness lookup needed.
+const ID_SCRAMBLE_MULTIPLIER = 700001;
+const ID_SCRAMBLE_RANGE = 900000;
+function scrambleIdCounter(counter) {
+  const scrambled = ((counter - 1) * ID_SCRAMBLE_MULTIPLIER) % ID_SCRAMBLE_RANGE;
+  return String(scrambled + 100000);
+}
+
+// Assigns the next ID number using a transaction against a shared counter
+// doc, so concurrent approvals can't collide on the same number. Targets
+// the user's own profile doc.
 async function assignIdNumber(userId) {
   const counterRef = db.collection("settings").doc("idCounter");
   const userRef = db.collection("users").doc(userId);
@@ -2368,7 +2417,7 @@ async function assignIdNumber(userId) {
     const lastNumber = counterDoc.exists ? (counterDoc.data().lastNumber || 0) : 0;
     const nextNumber = lastNumber + 1;
     const year = new Date().getFullYear();
-    const idNumber = `SK-${year}-${String(nextNumber).padStart(4, "0")}`;
+    const idNumber = `SK-${year}-${scrambleIdCounter(nextNumber)}`;
 
     tx.set(counterRef, { lastNumber: nextNumber }, { merge: true });
     tx.update(userRef, {
