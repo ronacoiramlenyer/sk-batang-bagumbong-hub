@@ -256,7 +256,17 @@ auth.onAuthStateChanged(async (user) => {
 
   const doc = await db.collection("users").doc(user.uid).get();
   if (!doc.exists) {
-    window.location.href = "index.html";
+    // The Firestore profile is gone (e.g. an admin deleted this account)
+    // but the browser still has an active Firebase Auth session for it —
+    // sign out so this doesn't keep re-triggering. Deleting a user only
+    // removes their Firestore doc, not their Auth login (that needs the
+    // Admin SDK/Console), so without this, a lingering session here would
+    // hit this exact check forever — and if already on index.html,
+    // redirecting there again just reloads the same page in an endless loop.
+    await auth.signOut();
+    if (pageName !== "index.html") {
+      window.location.href = "index.html";
+    }
     return;
   }
 
