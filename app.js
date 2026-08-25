@@ -475,6 +475,22 @@ function getDisplayEventStatus(event) {
   return event.status;
 }
 
+// Capacity is optional per event (null/undefined = no limit). registeredCount
+// is a denormalized counter on the event doc, incremented atomically in the
+// same transaction as each registration (see the Join Event handler) so it
+// can't drift out of sync from concurrent joins.
+function getCapacityInfo(event) {
+  const capacity = event.capacity || null;
+  const registeredCount = event.registeredCount || 0;
+  return {
+    hasLimit: capacity != null,
+    capacity,
+    registeredCount,
+    remaining: capacity != null ? Math.max(0, capacity - registeredCount) : null,
+    isFull: capacity != null && registeredCount >= capacity
+  };
+}
+
 /* =========================
    GENERIC COLLAPSIBLE CARD TOGGLE
    Any card with class "collapsible-card" containing a
@@ -534,12 +550,17 @@ if (createEventForm) {
     const dateInput = document.getElementById("eventDate");
     const timeInput = document.getElementById("eventTime");
     const locationInput = document.getElementById("eventLocation");
+    const capacityInput = document.getElementById("eventCapacity");
 
     const title = titleInput.value.trim();
     const description = descriptionInput.value.trim();
     const date = dateInput.value;
     const time = timeInput.value;
     const location = locationInput.value.trim();
+    // Blank = no limit. A capacity of 0 or less doesn't make sense, so
+    // treat it the same as "no limit" rather than an event no one can join.
+    const capacityRaw = parseInt(capacityInput.value, 10);
+    const capacity = (capacityInput.value.trim() && capacityRaw > 0) ? capacityRaw : null;
 
     if (!title || !date || !time || !location) {
       alert("Please complete all required fields.");
@@ -559,6 +580,8 @@ if (createEventForm) {
         date,
         time,
         location,
+        capacity,
+        registeredCount: 0,
         createdBy: user.uid,
         status: "upcoming",
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1304,6 +1327,7 @@ if (adminEventList) {
       snapshot.forEach((doc) => {
         const event = doc.data();
         const displayStatus = getDisplayEventStatus(event);
+        const capacityInfo = getCapacityInfo(event);
 
         // Auto-correct the stored status once its date has passed.
         // Self-limiting: once status is actually "completed" in Firestore,
@@ -1321,6 +1345,7 @@ if (adminEventList) {
             <div class="collapsible-header-text">
               <h3>${escapeHtml(event.title)}</h3>
               <span class="status-badge status-${displayStatus}">${displayStatus.toUpperCase()}</span>
+              ${capacityInfo.isFull ? '<span class="status-badge status-full">FULL</span>' : ""}
             </div>
             <span class="collapsible-chevron">▾</span>
           </div>
@@ -1332,6 +1357,11 @@ if (adminEventList) {
             <p class="event-meta">
               📍 ${escapeHtml(event.location)}
             </p>
+            ${capacityInfo.hasLimit ? `
+              <p class="event-meta">
+                👥 ${capacityInfo.registeredCount} / ${capacityInfo.capacity} registered
+              </p>
+            ` : ""}
 
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
@@ -1464,6 +1494,7 @@ document.addEventListener("click", async (e) => {
     editDate.value = data.date || "";
     editTime.value = data.time || "";
     editLocation.value = data.location || "";
+    editCapacity.value = data.capacity || "";
 
     editEventModal.classList.remove("hidden");
   } catch (err) {
@@ -1486,12 +1517,16 @@ if (editEventForm) {
     if (!editingEventId) return;
 
     try {
+      const editCapacityRaw = parseInt(editCapacity.value, 10);
+      const editCapacityValue = (editCapacity.value.trim() && editCapacityRaw > 0) ? editCapacityRaw : null;
+
       await db.collection("events").doc(editingEventId).update({
         title: editTitle.value.trim(),
         description: editDescription.value.trim(),
         date: editDate.value,
         time: editTime.value,
-        location: editLocation.value
+        location: editLocation.value,
+        capacity: editCapacityValue
       });
 
       editEventModal.classList.add("hidden");
@@ -2546,9 +2581,15 @@ if (userEventList) {
         docs.forEach((doc) => {
           const event = doc.data();
           const isJoined = myRegisteredEventIds.has(doc.id);
+          const capacityInfo = getCapacityInfo(event);
+          const isFull = capacityInfo.isFull && !isJoined;
 
           const card = document.createElement("div");
           card.className = "event-card";
+
+          let buttonLabel = "Join Event";
+          if (isJoined) buttonLabel = "Joined ✓";
+          else if (isFull) buttonLabel = "Full";
 
           card.innerHTML = `
             <h3>${escapeHtml(event.title)}</h3>
@@ -2556,12 +2597,17 @@ if (userEventList) {
               📅 ${escapeHtml(event.date)} · 🕒 ${escapeHtml(event.time)}<br>
               📍 ${escapeHtml(event.location)}
             </p>
+            ${capacityInfo.hasLimit && !isJoined ? `
+              <p class="event-meta">
+                ${isFull ? "👥 Event full" : `👥 ${capacityInfo.remaining} slot${capacityInfo.remaining === 1 ? "" : "s"} left`}
+              </p>
+            ` : ""}
 
             <button type="button"
               class="action-card small"
               data-id="${doc.id}"
-              ${isJoined ? "disabled" : ""}>
-              ${isJoined ? "Joined ✓" : "Join Event"}
+              ${isJoined || isFull ? "disabled" : ""}>
+              ${buttonLabel}
             </button>
           `;
 
@@ -2592,23 +2638,44 @@ document.addEventListener("click", async (e) => {
     // existing registration is blocked by security rules (only admins
     // can update a registration), which prevents duplicate joins.
     const registrationId = `${eventId}_${user.uid}`;
+    const eventRef = db.collection("events").doc(eventId);
+    const registrationRef = db.collection("registrations").doc(registrationId);
 
-    await db.collection("registrations").doc(registrationId).set({
-      eventId,
-      userId: user.uid,
-      fullName: userData.fullName || "",
-      email: userData.email || user.email || "",
-      attended: false,
-      registeredAt: firebase.firestore.FieldValue.serverTimestamp()
+    // Reading the event's registeredCount and bumping it inside the same
+    // transaction as creating the registration is what makes the capacity
+    // limit race-proof — if two people go for the last slot at once,
+    // Firestore serializes the transactions so only one can succeed; the
+    // other re-reads the now-full count and hits the capacity check below.
+    await db.runTransaction(async (tx) => {
+      const eventDoc = await tx.get(eventRef);
+      if (!eventDoc.exists) throw new Error("EVENT_NOT_FOUND");
+
+      const capacityInfo = getCapacityInfo(eventDoc.data());
+      if (capacityInfo.isFull) throw new Error("EVENT_FULL");
+
+      tx.update(eventRef, { registeredCount: capacityInfo.registeredCount + 1 });
+      tx.set(registrationRef, {
+        eventId,
+        userId: user.uid,
+        fullName: userData.fullName || "",
+        email: userData.email || user.email || "",
+        attended: false,
+        registeredAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
     });
 
     myRegisteredEventIds.add(eventId);
     btn.textContent = "Joined ✓";
   } catch (err) {
     console.error("Registration failed:", err);
-    alert("Could not register. You may already be registered, or something went wrong.");
-    btn.disabled = false;
-    btn.textContent = "Join Event";
+    if (err.message === "EVENT_FULL") {
+      alert("Sorry, this event just reached its participant limit.");
+      btn.textContent = "Full";
+    } else {
+      alert("Could not register. You may already be registered, or something went wrong.");
+      btn.disabled = false;
+      btn.textContent = "Join Event";
+    }
   }
 });
 

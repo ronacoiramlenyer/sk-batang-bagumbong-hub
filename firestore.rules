@@ -103,8 +103,21 @@ service cloud.firestore {
     match /events/{eventId} {
       // Any signed-in user can read events.
       allow read: if isSignedIn();
-      // Only admins can create, edit, or change status/archive events.
-      allow create, update, delete: if isAdmin();
+      // Only admins can create or delete events.
+      allow create, delete: if isAdmin();
+
+      // Admins can edit anything. A non-admin registering for the event is
+      // allowed exactly one kind of update: bumping registeredCount by 1,
+      // and only while still under capacity — this is what lets the join
+      // transaction enforce a participant limit without giving clients
+      // general write access to event docs. Any other field change, or an
+      // increment when already at/over capacity, is rejected.
+      allow update: if isAdmin() ||
+        (isSignedIn() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount']) &&
+         request.resource.data.registeredCount == resource.data.get('registeredCount', 0) + 1 &&
+         (resource.data.get('capacity', null) == null ||
+          resource.data.get('registeredCount', 0) < resource.data.capacity));
     }
 
     // ---------------------------

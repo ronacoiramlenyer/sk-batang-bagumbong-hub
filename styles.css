@@ -428,6 +428,10 @@ textarea {
   background: #999;
 }
 
+.status-full {
+  background: #b00020;
+}
+
 
 
 :root {
@@ -858,6 +862,10 @@ textarea {
 
 .status-archived {
   background: #999;
+}
+
+.status-full {
+  background: #b00020;
 }
 
 /* =========================
