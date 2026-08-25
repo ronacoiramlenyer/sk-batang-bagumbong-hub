@@ -12,6 +12,21 @@ firebase.initializeApp({
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// Explicitly use durable local storage for the signed-in session so it
+// reliably survives a full-page navigation (e.g. index.html -> dashboard.html
+// right after login). Without this, some mobile browsers/in-app webviews
+// (Messenger/Facebook in-app browser, private browsing, etc.) that restrict
+// IndexedDB can silently fail to persist the session across that navigation,
+// which looks like "login works, but the next page bounces you back out."
+// Falls back to sessionStorage-based persistence — more widely supported —
+// if IndexedDB isn't available.
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch((err) => {
+  console.error("LOCAL auth persistence unavailable, falling back to SESSION:", err);
+  return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+}).catch((err) => {
+  console.error("SESSION auth persistence also unavailable:", err);
+});
+
 /* =========================
    HTML ESCAPING (XSS PREVENTION)
    Any Firestore-sourced text (names, addresses, messages, event/announcement
