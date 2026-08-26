@@ -60,6 +60,20 @@ service cloud.firestore {
           resource.data.get('address', '') == ''
         );
 
+      // Owner can resubmit their photo/ID after a rejection — the only
+      // way idStatus can move from 'rejected' back to 'pending' without an
+      // admin, and only alongside a new photo/ID (nothing else changes).
+      allow update: if isOwner(userId) &&
+        resource.data.idStatus == 'rejected' &&
+        request.resource.data.idStatus == 'pending' &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.get('idNumber', null) == resource.data.get('idNumber', null) &&
+        request.resource.data.get('fullName', '') == resource.data.get('fullName', '') &&
+        request.resource.data.get('birthdate', '') == resource.data.get('birthdate', '') &&
+        request.resource.data.get('contactNumber', '') == resource.data.get('contactNumber', '') &&
+        request.resource.data.get('address', '') == resource.data.get('address', '') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['idStatus', 'photoData', 'idDocumentData']);
+
       // Admins can update any user doc, including role, ID approval,
       // and applying an approved profile change request.
       allow update: if isAdmin();

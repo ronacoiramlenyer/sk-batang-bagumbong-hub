@@ -1649,6 +1649,29 @@ document.addEventListener("click", async (e) => {
 
         const row = document.createElement("div");
         row.className = "registrant-row";
+
+        if (reg.removed) {
+          row.innerHTML = `
+            <div class="registrant-info">
+              <strong>${escapeHtml(reg.fullName || "Unknown")}</strong>
+              <span class="status-badge status-full">REMOVED</span>
+              ${reg.removedReason ? `<span class="event-meta">${escapeHtml(reg.removedReason)}</span>` : ""}
+            </div>
+            <div class="registrant-actions">
+              <button type="button"
+                class="cert-btn"
+                data-role="restore-registrant"
+                data-id="${doc.id}"
+                data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
+                title="Restore to this event">
+                ↩️ Restore
+              </button>
+            </div>
+          `;
+          registrantsList.appendChild(row);
+          return;
+        }
+
         row.innerHTML = `
           <div class="registrant-info">
             <strong>${escapeHtml(reg.fullName || "Unknown")}</strong>
@@ -1855,7 +1878,15 @@ confirmRemoveRegistrantBtn?.addEventListener("click", async () => {
     const messageRef = threadRef.collection("messages").doc();
 
     const batch = db.batch();
-    batch.delete(db.collection("registrations").doc(removingRegistration.registrationId));
+    // Soft-removed (not deleted) so an admin can Restore them later — the
+    // rules only let an admin flip this, so it can't be undone just by the
+    // resident re-clicking "Join Event".
+    batch.update(db.collection("registrations").doc(removingRegistration.registrationId), {
+      removed: true,
+      removedReason: reason,
+      removedBy: admin.uid,
+      removedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
     batch.update(db.collection("events").doc(activeRegistrantsEventId), {
       registeredCount: firebase.firestore.FieldValue.increment(-1)
     });
@@ -1886,6 +1917,50 @@ confirmRemoveRegistrantBtn?.addEventListener("click", async () => {
     alert("Failed to remove this registrant. Please try again.");
   } finally {
     confirmRemoveRegistrantBtn.disabled = false;
+  }
+});
+
+// Restore a previously-removed registrant. Runs as a transaction against
+// the event doc for the same reason the original join does — re-checks
+// capacity fresh, since other people may have joined in the meantime.
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="restore-registrant"]');
+  if (!btn || btn.disabled) return;
+  if (!activeRegistrantsEventId) return;
+
+  if (!confirm(`Restore ${btn.dataset.fullname} to this event?`)) return;
+
+  btn.disabled = true;
+  btn.textContent = "Restoring…";
+
+  try {
+    const eventRef = db.collection("events").doc(activeRegistrantsEventId);
+    const registrationRef = db.collection("registrations").doc(btn.dataset.id);
+
+    await db.runTransaction(async (tx) => {
+      const eventDoc = await tx.get(eventRef);
+      if (!eventDoc.exists) throw new Error("EVENT_NOT_FOUND");
+
+      const capacityInfo = getCapacityInfo(eventDoc.data());
+      if (capacityInfo.isFull) throw new Error("EVENT_FULL");
+
+      tx.update(eventRef, { registeredCount: capacityInfo.registeredCount + 1 });
+      tx.update(registrationRef, {
+        removed: false,
+        removedReason: firebase.firestore.FieldValue.delete(),
+        removedBy: firebase.firestore.FieldValue.delete(),
+        removedAt: firebase.firestore.FieldValue.delete()
+      });
+    });
+  } catch (err) {
+    console.error("Failed to restore registrant:", err);
+    if (err.message === "EVENT_FULL") {
+      alert("This event is at capacity right now — free up a slot first, or raise the limit, then try again.");
+    } else {
+      alert("Failed to restore this registrant. Please try again.");
+    }
+    btn.disabled = false;
+    btn.textContent = "↩️ Restore";
   }
 });
 
@@ -2507,18 +2582,22 @@ if (idApplicationsList) {
                 style="width:100%; height:auto; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:10px;">
             ` : ""}
 
+            ${status === "rejected" && app.idRejectionReason ? `
+              <p class="event-meta"><strong>Rejection reason sent:</strong> ${escapeHtml(app.idRejectionReason)}</p>
+            ` : ""}
+
             <div class="admin-actions horizontal">
               <button class="icon-btn status"
                 data-role="approve-id" data-id="${doc.id}"
-                ${status !== "pending" ? "disabled" : ""}
-                title="Approve">
+                ${status === "approved" ? "disabled" : ""}
+                title="${status === "rejected" ? "Approve (reverses the rejection)" : "Approve"}">
                 ✅
                 <span>Approve</span>
               </button>
 
               <button class="icon-btn archive"
-                data-role="reject-id" data-id="${doc.id}"
-                ${status !== "pending" ? "disabled" : ""}
+                data-role="reject-id" data-id="${doc.id}" data-fullname="${appNameSafe}"
+                ${status === "rejected" ? "disabled" : ""}
                 title="Reject">
                 ❌
                 <span>Reject</span>
@@ -2584,30 +2663,116 @@ async function assignIdNumber(userId) {
   });
 }
 
-// Approve / Reject
+// Approve (also used to reverse a rejection — assigns/reassigns an ID
+// number and marks approved regardless of the previous status).
 document.addEventListener("click", async (e) => {
-  const btn = e.target.closest('[data-role="approve-id"], [data-role="reject-id"]');
+  const btn = e.target.closest('[data-role="approve-id"]');
   if (!btn || btn.disabled) return;
 
-  const userId = btn.dataset.id;
-  const isApprove = btn.dataset.role === "approve-id";
+  try {
+    await assignIdNumber(btn.dataset.id);
+  } catch (err) {
+    console.error("Failed to approve applicant:", err);
+    alert("Failed to update status.");
+  }
+});
 
-  if (!isApprove && !confirm("Reject this applicant?")) return;
+/* =========================
+   ADMIN – REJECT ID APPLICATION (with reason + automatic message)
+   Mirrors the event-removal flow: a required, editable reason gets sent
+   as a message via the existing SK-office thread system, so the resident
+   can reply — and, unlike the old immediate-confirm() version, rejection
+   is reversible: the Approve button stays enabled afterward.
+   ========================= */
+
+const rejectIdModal = document.getElementById("rejectIdModal");
+const rejectIdName = document.getElementById("rejectIdName");
+const rejectIdReason = document.getElementById("rejectIdReason");
+const confirmRejectIdBtn = document.getElementById("confirmRejectIdBtn");
+const cancelRejectIdBtn = document.getElementById("cancelRejectIdBtn");
+
+let rejectingApplicantId = null;
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-role="reject-id"]');
+  if (!btn || btn.disabled) return;
+
+  rejectingApplicantId = btn.dataset.id;
+  rejectIdName.textContent = btn.dataset.fullname || "this applicant";
+  rejectIdReason.value =
+    "We're unable to confirm you're a resident of Barangay 171 Bagumbong based on the ID submitted, so your SK Barangay ID application has been rejected. If you believe this is a mistake, please reply here with additional proof of residency — you can also resubmit a corrected photo/ID from your Profile page.";
+
+  rejectIdModal?.classList.remove("hidden");
+});
+
+cancelRejectIdBtn?.addEventListener("click", () => {
+  rejectIdModal?.classList.add("hidden");
+  rejectingApplicantId = null;
+});
+
+confirmRejectIdBtn?.addEventListener("click", async () => {
+  if (!rejectingApplicantId) return;
+
+  const reason = rejectIdReason.value.trim();
+  if (!reason) {
+    alert("Please enter a reason — it's sent to them as the message.");
+    return;
+  }
+
+  const admin = auth.currentUser;
+  confirmRejectIdBtn.disabled = true;
 
   try {
-    if (isApprove) {
-      await assignIdNumber(userId);
-    } else {
-      const admin = auth.currentUser;
-      await db.collection("users").doc(userId).update({
-        idStatus: "rejected",
-        idReviewedBy: admin.uid,
-        idReviewedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+    let adminFullName = "SK Office";
+    let applicantFullName = "";
+    try {
+      const [adminDoc, applicantDoc] = await Promise.all([
+        db.collection("users").doc(admin.uid).get(),
+        db.collection("users").doc(rejectingApplicantId).get()
+      ]);
+      adminFullName = adminDoc.exists ? (adminDoc.data().fullName || "SK Office") : "SK Office";
+      applicantFullName = applicantDoc.exists ? (applicantDoc.data().fullName || "") : "";
+    } catch (err) {
+      console.error("Failed to fetch names for rejection message:", err);
     }
+
+    const threadRef = db.collection("threads").doc();
+    const messageRef = threadRef.collection("messages").doc();
+
+    const batch = db.batch();
+    batch.update(db.collection("users").doc(rejectingApplicantId), {
+      idStatus: "rejected",
+      idRejectionReason: reason,
+      idReviewedBy: admin.uid,
+      idReviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    batch.set(threadRef, {
+      userId: rejectingApplicantId,
+      userFullName: applicantFullName,
+      subject: "SK ID Application Rejected",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastMessageText: reason,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unreadByAdmin: false,
+      unreadByUser: true
+    });
+    batch.set(messageRef, {
+      senderId: admin.uid,
+      senderRole: "admin",
+      senderName: adminFullName,
+      text: reason,
+      sentAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+
+    rejectIdModal?.classList.add("hidden");
+    rejectingApplicantId = null;
   } catch (err) {
-    console.error("Failed to update applicant status:", err);
-    alert("Failed to update status.");
+    console.error("Failed to reject applicant:", err);
+    alert("Failed to reject this applicant. Please try again.");
+  } finally {
+    confirmRejectIdBtn.disabled = false;
   }
 });
 
@@ -2652,6 +2817,7 @@ document.addEventListener("click", async (e) => {
 const userEventList = document.getElementById("userEventList");
 
 let myRegisteredEventIds = new Set();
+let myRemovedEventIds = new Set();
 
 async function refreshMyRegistrations() {
   const user = auth.currentUser;
@@ -2661,7 +2827,17 @@ async function refreshMyRegistrations() {
     .where("userId", "==", user.uid)
     .get();
 
-  myRegisteredEventIds = new Set(snap.docs.map((d) => d.data().eventId));
+  myRegisteredEventIds = new Set();
+  myRemovedEventIds = new Set();
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    // A removed registration is deliberately not re-joinable by clicking
+    // Join Event again (only an admin's Restore can undo it) — kept out
+    // of myRegisteredEventIds so the UI can show that distinctly instead
+    // of a clickable button that would just fail.
+    if (data.removed) myRemovedEventIds.add(data.eventId);
+    else myRegisteredEventIds.add(data.eventId);
+  });
 }
 
 if (userEventList) {
@@ -2694,6 +2870,7 @@ if (userEventList) {
         docs.forEach((doc) => {
           const event = doc.data();
           const isJoined = myRegisteredEventIds.has(doc.id);
+          const isRemoved = myRemovedEventIds.has(doc.id);
           const capacityInfo = getCapacityInfo(event);
           const isFull = capacityInfo.isFull && !isJoined;
 
@@ -2702,6 +2879,7 @@ if (userEventList) {
 
           let buttonLabel = "Join Event";
           if (isJoined) buttonLabel = "Joined ✓";
+          else if (isRemoved) buttonLabel = "Removed";
           else if (isFull) buttonLabel = "Full";
 
           card.innerHTML = `
@@ -2710,7 +2888,12 @@ if (userEventList) {
               📅 ${escapeHtml(event.date)} · 🕒 ${escapeHtml(event.time)}<br>
               📍 ${escapeHtml(event.location)}
             </p>
-            ${capacityInfo.hasLimit && !isJoined ? `
+            ${isRemoved ? `
+              <p class="event-meta">
+                👥 You were removed from this event — see Messages for why, or reply there to have it reconsidered.
+              </p>
+            ` : ""}
+            ${capacityInfo.hasLimit && !isJoined && !isRemoved ? `
               <p class="event-meta">
                 ${isFull ? "👥 Event full" : `👥 ${capacityInfo.remaining} slot${capacityInfo.remaining === 1 ? "" : "s"} left`}
               </p>
@@ -2719,7 +2902,7 @@ if (userEventList) {
             <button type="button"
               class="action-card small"
               data-id="${doc.id}"
-              ${isJoined || isFull ? "disabled" : ""}>
+              ${isJoined || isFull || isRemoved ? "disabled" : ""}>
               ${buttonLabel}
             </button>
           `;
@@ -3243,6 +3426,123 @@ if (messagesHeaderBtn) {
 const idApplicationStatusEl = document.getElementById("idApplicationStatus");
 let myIdApplicationData = null;
 
+// Rejection is reversible on the resident's end too: resubmitting a new
+// photo/ID here flips idStatus back to 'pending' (allowed by a narrow
+// self-update rule that only fires from 'rejected', see firestore.rules),
+// putting them back in the admin's review queue without needing an admin
+// to do anything first.
+function renderIdApplicationStatus(data) {
+  const status = data.idStatus || "pending"; // profile-complete users default to pending
+  myIdApplicationData = data;
+
+  let actionHtml = "";
+  if (status === "approved") {
+    actionHtml = `<button type="button" class="quick-access-action" data-role="download-id">Download</button>`;
+  }
+
+  const resubmitHtml = status === "rejected" ? `
+    <div style="margin-top:14px;">
+      ${data.idRejectionReason ? `<p class="dashboard-subtext"><strong>Reason:</strong> ${escapeHtml(data.idRejectionReason)}</p>` : ""}
+      <p class="dashboard-subtext">
+        You can reply in Messages about this, or resubmit a corrected photo
+        and ID below to be reviewed again.
+      </p>
+
+      <label>Photo (clear front-facing photo)</label>
+      <input id="idResubmitPhotoFile" type="file" accept="image/png, image/jpeg">
+      <img id="idResubmitPhotoPreview" class="template-preview hidden" alt="Photo preview">
+
+      <label>Valid ID</label>
+      <input id="idResubmitDocFile" type="file" accept="image/png, image/jpeg">
+      <img id="idResubmitDocPreview" class="template-preview hidden" alt="ID preview">
+
+      <div id="idResubmitError" class="form-error hidden"></div>
+
+      <button type="button" id="idResubmitBtn" class="submit-btn" style="margin-top:10px;">
+        Resubmit for Review
+      </button>
+    </div>
+  ` : "";
+
+  idApplicationStatusEl.innerHTML = `
+    <div class="status-row-left">
+      <span class="quick-access-icon">🪪</span>
+      <span class="quick-access-label">SK ID: ${status.toUpperCase()}</span>
+      ${data.idNumber ? `<span class="dashboard-subtext">${escapeHtml(data.idNumber)}</span>` : ""}
+    </div>
+    ${actionHtml}
+    ${resubmitHtml}
+  `;
+
+  if (status !== "rejected") return;
+
+  let resubmitPhotoDataUrl = null;
+  let resubmitDocDataUrl = null;
+
+  document.getElementById("idResubmitPhotoFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      resubmitPhotoDataUrl = await compressImageToDataUrl(file);
+      const preview = document.getElementById("idResubmitPhotoPreview");
+      preview.src = resubmitPhotoDataUrl;
+      preview.classList.remove("hidden");
+    } catch (err) {
+      console.error("Photo processing failed:", err);
+      alert("Couldn't process that photo. Try a different image.");
+    }
+  });
+
+  document.getElementById("idResubmitDocFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      resubmitDocDataUrl = await compressImageToDataUrl(file, 800, 0.8);
+      const preview = document.getElementById("idResubmitDocPreview");
+      preview.src = resubmitDocDataUrl;
+      preview.classList.remove("hidden");
+    } catch (err) {
+      console.error("ID processing failed:", err);
+      alert("Couldn't process that image. Try a different file.");
+    }
+  });
+
+  document.getElementById("idResubmitBtn").addEventListener("click", async () => {
+    const errorEl = document.getElementById("idResubmitError");
+    errorEl.classList.add("hidden");
+
+    if (!resubmitPhotoDataUrl || !resubmitDocDataUrl) {
+      errorEl.textContent = "Please upload both a photo and a valid ID.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const btn = document.getElementById("idResubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+
+    try {
+      await db.collection("users").doc(user.uid).update({
+        idStatus: "pending",
+        photoData: resubmitPhotoDataUrl,
+        idDocumentData: resubmitDocDataUrl
+      });
+
+      const refreshedDoc = await db.collection("users").doc(user.uid).get();
+      renderIdApplicationStatus(refreshedDoc.data());
+    } catch (err) {
+      console.error("Resubmission failed:", err);
+      errorEl.textContent = "Something went wrong. Please try again.";
+      errorEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Resubmit for Review";
+    }
+  });
+}
+
 if (idApplicationStatusEl) {
   waitForUser().then(async (user) => {
     if (!user) return;
@@ -3251,23 +3551,7 @@ if (idApplicationStatusEl) {
       const userDoc = await db.collection("users").doc(user.uid).get();
       if (!userDoc.exists) return;
 
-      const data = userDoc.data();
-      const status = data.idStatus || "pending"; // profile-complete users default to pending
-      myIdApplicationData = data;
-
-      let actionHtml = "";
-      if (status === "approved") {
-        actionHtml = `<button type="button" class="quick-access-action" data-role="download-id">Download</button>`;
-      }
-
-      idApplicationStatusEl.innerHTML = `
-        <div class="status-row-left">
-          <span class="quick-access-icon">🪪</span>
-          <span class="quick-access-label">SK ID: ${status.toUpperCase()}</span>
-          ${data.idNumber ? `<span class="dashboard-subtext">${escapeHtml(data.idNumber)}</span>` : ""}
-        </div>
-        ${actionHtml}
-      `;
+      renderIdApplicationStatus(userDoc.data());
     } catch (err) {
       console.error("Failed to load ID status:", err);
       idApplicationStatusEl.innerHTML =

@@ -25,6 +25,28 @@
       </div>
     </section>
 
+    <!-- REJECT APPLICANT MODAL -->
+    <div id="rejectIdModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Reject <span id="rejectIdName"></span>'s ID application</h3>
+        <p class="dashboard-subtext">
+          Sends them a message explaining why, from the SK office. They can
+          reply and resubmit a corrected photo/ID from their Profile page.
+        </p>
+
+        <label>Reason (sent to them as a message)</label>
+        <textarea id="rejectIdReason" rows="4"></textarea>
+
+        <button id="confirmRejectIdBtn" class="submit-btn">
+          Reject & Send Message
+        </button>
+
+        <span id="cancelRejectIdBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
+
     <!-- NAVIGATION -->
     <div class="admin-nav">
       <button type="button" class="action-card secondary"
