@@ -62,6 +62,42 @@ function sortByLastName(list, getFullName) {
 }
 
 /* =========================
+   ROLES: user / admin / superadmin
+   Super admin is a superset of admin — anywhere "admin" access is
+   checked, super admin counts too. A handful of actions (delete user,
+   reject an ID application, remove/restore an event registrant) are
+   reserved for super admin only, gated separately using
+   currentUserRole === "superadmin" — the actual enforcement for those
+   lives in firestore.rules; hiding the buttons here is just so a regular
+   admin doesn't see a control that would fail.
+   ========================= */
+function isAdminRole(role) {
+  return role === "admin" || role === "superadmin";
+}
+
+// Set once the signed-in user's own doc is loaded (see the auth guard
+// below) — read by admin-panel render functions to decide whether to show
+// the super-admin-only controls.
+let currentUserRole = null;
+
+// The auth guard usually sets currentUserRole well before any page-specific
+// list renders, but there's no strict ordering guarantee between its own
+// Firestore read and another onSnapshot listener's first callback firing.
+// Admin list setups call this first so the super-admin-only buttons don't
+// flicker missing on a fast page load.
+async function ensureCurrentUserRole() {
+  if (currentUserRole !== null) return;
+  const user = auth.currentUser;
+  if (!user) return;
+  try {
+    const doc = await db.collection("users").doc(user.uid).get();
+    currentUserRole = doc.exists ? doc.data().role : null;
+  } catch (err) {
+    console.error("Failed to load current user's role:", err);
+  }
+}
+
+/* =========================
    PAGE DETECTION
    ========================= */
 
@@ -88,7 +124,7 @@ loginForm?.addEventListener("submit", async (e) => {
     const role = doc.exists ? doc.data().role : "user";
 
     window.location.href =
-      role === "admin" ? "admin.html" : "dashboard.html";
+      isAdminRole(role) ? "admin.html" : "dashboard.html";
 
   } catch (err) {
     loginError.textContent = "Incorrect email or password.";
@@ -287,9 +323,10 @@ auth.onAuthStateChanged(async (user) => {
 
   const userData = doc.data();
   const role = userData.role;
+  currentUserRole = role;
 
   // 🚫 Block non-admins from any admin page
-  if (ADMIN_ONLY_PAGES.includes(pageName) && role !== "admin") {
+  if (ADMIN_ONLY_PAGES.includes(pageName) && !isAdminRole(role)) {
     window.location.href = "dashboard.html";
     return;
   }
@@ -303,7 +340,7 @@ auth.onAuthStateChanged(async (user) => {
   // login gets bounced to "Complete Your Profile" instead of the admin panel.
   const needsCompleteProfile = AUTH_REQUIRED_PAGES.includes(pageName) &&
     pageName !== "complete-profile.html" &&
-    role !== "admin" &&
+    !isAdminRole(role) &&
     !isProfileComplete(userData);
 
   if (needsCompleteProfile) {
@@ -313,7 +350,7 @@ auth.onAuthStateChanged(async (user) => {
 
   // Already complete — no reason to be stuck on the completion page
   if (pageName === "complete-profile.html" && isProfileComplete(userData)) {
-    window.location.href = role === "admin" ? "admin.html" : "dashboard.html";
+    window.location.href = isAdminRole(role) ? "admin.html" : "dashboard.html";
     return;
   }
 
@@ -1782,6 +1819,8 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".icon-btn.registrants");
   if (!btn) return;
 
+  await ensureCurrentUserRole();
+
   activeRegistrantsEventId = btn.dataset.id;
   activeRegistrantsEventData = null;
 
@@ -1833,14 +1872,16 @@ document.addEventListener("click", async (e) => {
               ${reg.removedReason ? `<span class="event-meta">${escapeHtml(reg.removedReason)}</span>` : ""}
             </div>
             <div class="registrant-actions">
-              <button type="button"
-                class="cert-btn"
-                data-role="restore-registrant"
-                data-id="${doc.id}"
-                data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
-                title="Restore to this event">
-                ↩️ Restore
-              </button>
+              ${currentUserRole === "superadmin" ? `
+                <button type="button"
+                  class="cert-btn"
+                  data-role="restore-registrant"
+                  data-id="${doc.id}"
+                  data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
+                  title="Restore to this event">
+                  ↩️ Restore
+                </button>
+              ` : '<span class="dashboard-subtext">Only a super admin can restore</span>'}
             </div>
           `;
           registrantsList.appendChild(row);
@@ -1868,15 +1909,17 @@ document.addEventListener("click", async (e) => {
               title="${reg.attended ? "Generate certificate" : "Mark attended first"}">
               🎓 Certificate
             </button>
-            <button type="button"
-              class="cert-btn"
-              data-role="remove-registrant"
-              data-id="${doc.id}"
-              data-userid="${reg.userId || ""}"
-              data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
-              title="Remove from event">
-              🚫 Remove
-            </button>
+            ${currentUserRole === "superadmin" ? `
+              <button type="button"
+                class="cert-btn"
+                data-role="remove-registrant"
+                data-id="${doc.id}"
+                data-userid="${reg.userId || ""}"
+                data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
+                title="Remove from event">
+                🚫 Remove
+              </button>
+            ` : ""}
           </div>
         `;
 
@@ -2329,8 +2372,8 @@ if (usersList) {
           <div class="collapsible-header-text">
             ${u.photoData ? `<img class="id-app-thumb" src="${u.photoData}" alt="${fullNameSafe}">` : ""}
             <h3>${u.fullName ? fullNameSafe : "Unknown"}</h3>
-            <span class="status-badge ${u.role === "admin" ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
-              ${u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
+            <span class="status-badge ${isAdminRole(u.role) ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
+              ${u.role === "superadmin" ? "SUPER ADMIN" : u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
             </span>
             ${pendingRequest ? '<span class="status-badge status-archived">CHANGE REQUEST</span>' : ""}
           </div>
@@ -2378,7 +2421,7 @@ if (usersList) {
             </div>
           ` : ""}
 
-          ${u.role !== "admin" ? `
+          ${currentUserRole === "superadmin" && !isAdminRole(u.role) ? `
             <div class="admin-actions horizontal">
               <button class="icon-btn archive"
                 data-role="delete-user" data-id="${doc.id}" data-name="${fullNameSafe}"
@@ -2395,14 +2438,16 @@ if (usersList) {
     });
   }
 
-  db.collection("users")
-    .onSnapshot((snapshot) => {
-      cachedUsers = sortByLastName(snapshot.docs, (doc) => doc.data().fullName);
-      renderUsersList();
-    }, (err) => {
-      console.error("Failed to load users:", err);
-      usersList.innerHTML = '<p class="dashboard-subtext">Failed to load users.</p>';
-    });
+  ensureCurrentUserRole().then(() => {
+    db.collection("users")
+      .onSnapshot((snapshot) => {
+        cachedUsers = sortByLastName(snapshot.docs, (doc) => doc.data().fullName);
+        renderUsersList();
+      }, (err) => {
+        console.error("Failed to load users:", err);
+        usersList.innerHTML = '<p class="dashboard-subtext">Failed to load users.</p>';
+      });
+  });
 
   db.collection("profileChangeRequests")
     .where("status", "==", "pending")
@@ -2431,7 +2476,7 @@ if (usersList) {
         u.address || "",
         u.birthdate || "",
         u.contactNumber || "",
-        u.role === "admin" ? "" : (u.idStatus || "pending"),
+        isAdminRole(u.role) ? "" : (u.idStatus || "pending"),
         u.idNumber || "",
         csvCellDate(u.createdAt)
       ];
@@ -2784,13 +2829,15 @@ function renderIdApplicationsList() {
                 <span>Approve</span>
               </button>
 
-              <button class="icon-btn archive"
-                data-role="reject-id" data-id="${doc.id}" data-fullname="${appNameSafe}"
-                ${status === "rejected" ? "disabled" : ""}
-                title="Reject">
-                ❌
-                <span>Reject</span>
-              </button>
+              ${currentUserRole === "superadmin" ? `
+                <button class="icon-btn archive"
+                  data-role="reject-id" data-id="${doc.id}" data-fullname="${appNameSafe}"
+                  ${status === "rejected" ? "disabled" : ""}
+                  title="Reject">
+                  ❌
+                  <span>Reject</span>
+                </button>
+              ` : ""}
 
               <button class="icon-btn edit"
                 data-role="generate-id" data-id="${doc.id}"
@@ -2818,20 +2865,22 @@ if (idApplicationsList) {
   });
 
   // Regular users only — admins don't go through ID approval themselves.
-  db.collection("users")
-    .where("role", "==", "user")
-    .onSnapshot((snapshot) => {
-      // Only cache users who've completed their profile (have ID-relevant data)
-      cachedIdApplicants = snapshot.docs.filter((doc) => {
-        const u = doc.data();
-        return u.address && u.birthdate && u.contactNumber && u.photoData && u.idDocumentData;
+  ensureCurrentUserRole().then(() => {
+    db.collection("users")
+      .where("role", "==", "user")
+      .onSnapshot((snapshot) => {
+        // Only cache users who've completed their profile (have ID-relevant data)
+        cachedIdApplicants = snapshot.docs.filter((doc) => {
+          const u = doc.data();
+          return u.address && u.birthdate && u.contactNumber && u.photoData && u.idDocumentData;
+        });
+        renderIdApplicationsList();
+      }, (err) => {
+        console.error("Failed to load ID applicants:", err);
+        idApplicationsList.innerHTML =
+          '<p class="dashboard-subtext">Failed to load applicants.</p>';
       });
-      renderIdApplicationsList();
-    }, (err) => {
-      console.error("Failed to load ID applicants:", err);
-      idApplicationsList.innerHTML =
-        '<p class="dashboard-subtext">Failed to load applicants.</p>';
-    });
+  });
 }
 
 // Turns a sequential counter (1, 2, 3, ...) into a 6-digit code that doesn't
@@ -3064,7 +3113,7 @@ if (userEventList) {
     try {
       const userDoc = await db.collection("users").doc(user.uid).get();
       const userData = userDoc.exists ? userDoc.data() : {};
-      myIdApprovedOrAdmin = userData.role === "admin" || userData.idStatus === "approved";
+      myIdApprovedOrAdmin = isAdminRole(userData.role) || userData.idStatus === "approved";
     } catch (err) {
       console.error("Failed to load ID approval status:", err);
     }
@@ -3168,7 +3217,7 @@ document.addEventListener("click", async (e) => {
     // Belt-and-suspenders re-check (the button's disabled state already
     // covers the normal case) — the actual enforcement is the Firestore
     // rule on the registration create itself.
-    if (userData.role !== "admin" && userData.idStatus !== "approved") {
+    if (!isAdminRole(userData.role) && userData.idStatus !== "approved") {
       alert("Your SK Barangay ID needs to be approved before you can join events.");
       btn.disabled = false;
       btn.textContent = "ID approval required";

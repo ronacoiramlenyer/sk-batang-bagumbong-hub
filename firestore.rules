@@ -13,11 +13,21 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Helper: is the request from a user whose role == 'admin'?
-    // Reads the requester's own /users/{uid} doc to check their role.
+    // Helper: is the request from an admin OR a super admin? Super admin is
+    // a superset of admin — everything isAdmin() gates, a super admin can
+    // also do — so this intentionally covers both roles. Use isSuperAdmin()
+    // below for the handful of actions reserved for super admin only.
     function isAdmin() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
+    }
+
+    // Helper: is the request from a super admin specifically? Reserved for
+    // deleting a user, rejecting an ID application, and removing/restoring
+    // an event registrant — regular admins can do everything else.
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin';
     }
 
     // ---------------------------
@@ -74,10 +84,21 @@ service cloud.firestore {
         request.resource.data.get('address', '') == resource.data.get('address', '') &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['idStatus', 'photoData', 'idDocumentData']);
 
-      // Admins can update any user doc, including role, ID approval,
-      // and applying an approved profile change request.
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      // Admins can update any user doc — role, ID approval, applying an
+      // approved profile change request, etc. — EXCEPT rejecting an ID
+      // application (setting idStatus to 'rejected'), which is reserved
+      // for super admin. Detected by idStatus actually changing to
+      // 'rejected' in this write, not just already being 'rejected' from
+      // an earlier one (so a regular admin can still, say, approve a
+      // profile-change request for someone whose ID happens to be
+      // rejected, without that being mistaken for a reject action).
+      allow update: if isSuperAdmin() ||
+        (isAdmin() &&
+         !(request.resource.data.idStatus == 'rejected' &&
+           request.resource.data.diff(resource.data).affectedKeys().hasAny(['idStatus'])));
+
+      // Deleting a user is reserved for super admin.
+      allow delete: if isSuperAdmin();
     }
 
     // ---------------------------
@@ -154,14 +175,17 @@ service cloud.firestore {
         (isAdmin() ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.idStatus == 'approved');
 
-      // Only admins can update (e.g. marking attendance).
-      allow update: if isAdmin();
+      // Admins can update (e.g. marking attendance), except changing the
+      // `removed` flag itself — removing or restoring a registrant — which
+      // is reserved for super admin.
+      allow update: if isSuperAdmin() ||
+        (isAdmin() &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['removed']));
 
-      // Only admins can delete — used to remove a registrant from an event
-      // (e.g. residency couldn't be confirmed). The reason and timestamp
-      // still live on permanently as a message in a threads doc (see
-      // below), so removing one doesn't erase the record entirely.
-      allow delete: if isAdmin();
+      // No client deletes — removal is a soft `removed` flag above (see
+      // the reason preserved permanently as a message in a threads doc),
+      // not an actual delete. Kept denied here for defense in depth.
+      allow delete: if false;
     }
 
     // ---------------------------
@@ -193,11 +217,12 @@ service cloud.firestore {
       allow read, update: if isAdmin() ||
         (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // Starting a new thread — must be the owner's own userId, unless an
-      // admin is opening one on a resident's behalf (e.g. the automatic
-      // "why you were removed from an event" message).
+      // Starting a new thread — must be the owner's own userId, unless a
+      // super admin is opening one on a resident's behalf (the automatic
+      // "why you were rejected/removed" messages — both super-admin-only
+      // actions, so this matches).
       allow create: if isSignedIn() &&
-        (request.resource.data.userId == request.auth.uid || isAdmin());
+        (request.resource.data.userId == request.auth.uid || isSuperAdmin());
 
       allow delete: if isAdmin();
 
