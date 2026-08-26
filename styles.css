@@ -1260,6 +1260,29 @@ textarea {
   border: 1px solid #ddd;
 }
 
+.photo-crop-viewport {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  max-width: 100%;
+  margin: 12px auto 0 auto;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.15);
+  background: #eee;
+  touch-action: none;
+  cursor: grab;
+}
+
+.photo-crop-viewport img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 /* =========================
    REGISTRANT ROW ACTIONS
    ========================= */

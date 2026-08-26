@@ -29,7 +29,11 @@
         <label>Contact Number</label>
         <input id="cpContactNumber" type="tel" required>
 
-        <label>Photo (clear front-facing photo, used for your SK ID)</label>
+        <label>Photo</label>
+        <p class="dashboard-subtext">
+          2x2 ID-style photo — square, plain background, your whole face
+          clearly visible. You'll be able to crop it after choosing a file.
+        </p>
         <input id="cpPhotoFile" type="file" accept="image/png, image/jpeg">
         <img id="cpPhotoPreview" class="template-preview hidden" alt="Photo preview">
 
@@ -44,6 +48,28 @@
         </button>
       </form>
     </section>
+
+    <!-- PHOTO CROP MODAL -->
+    <div id="photoCropModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Crop Your Photo</h3>
+        <p class="dashboard-subtext">
+          Position and zoom so your whole face is clearly visible, like a
+          2x2 ID photo.
+        </p>
+
+        <div id="photoCropViewport" class="photo-crop-viewport">
+          <img id="photoCropImage" alt="Photo to crop">
+        </div>
+
+        <input id="photoCropZoom" type="range" min="100" max="300" value="100" style="width:100%; margin-top:10px;">
+
+        <button type="button" id="photoCropConfirmBtn" class="submit-btn" style="margin-top:12px;">
+          Use This Photo
+        </button>
+        <span id="photoCropCancelBtn" class="back-link">Cancel</span>
+      </div>
+    </div>
 
   </div>
 

@@ -141,18 +141,16 @@ const regIdDocumentPreview = document.getElementById("regIdDocumentPreview");
 let regPhotoDataUrl = null;
 let regIdDocumentDataUrl = null;
 
-regPhotoFileInput?.addEventListener("change", async () => {
+regPhotoFileInput?.addEventListener("change", () => {
   const file = regPhotoFileInput.files[0];
   if (!file) return;
 
-  try {
-    regPhotoDataUrl = await compressImageToDataUrl(file);
-    regPhotoPreview.src = regPhotoDataUrl;
+  openPhotoCropper(file, (dataUrl) => {
+    if (!dataUrl) return;
+    regPhotoDataUrl = dataUrl;
+    regPhotoPreview.src = dataUrl;
     regPhotoPreview.classList.remove("hidden");
-  } catch (err) {
-    console.error("Photo processing failed:", err);
-    alert("Couldn't process that photo. Try a different image.");
-  }
+  });
 });
 
 regIdDocumentFileInput?.addEventListener("change", async () => {
@@ -362,18 +360,16 @@ const cpIdDocumentPreview = document.getElementById("cpIdDocumentPreview");
 let cpPhotoDataUrl = null;
 let cpIdDocumentDataUrl = null;
 
-cpPhotoFileInput?.addEventListener("change", async () => {
+cpPhotoFileInput?.addEventListener("change", () => {
   const file = cpPhotoFileInput.files[0];
   if (!file) return;
 
-  try {
-    cpPhotoDataUrl = await compressImageToDataUrl(file);
-    cpPhotoPreview.src = cpPhotoDataUrl;
+  openPhotoCropper(file, (dataUrl) => {
+    if (!dataUrl) return;
+    cpPhotoDataUrl = dataUrl;
+    cpPhotoPreview.src = dataUrl;
     cpPhotoPreview.classList.remove("hidden");
-  } catch (err) {
-    console.error("Photo processing failed:", err);
-    alert("Couldn't process that photo. Try a different image.");
-  }
+  });
 });
 
 cpIdDocumentFileInput?.addEventListener("change", async () => {
@@ -704,6 +700,166 @@ function compressImageToDataUrl(file, maxDimension = 500, quality = 0.75) {
     reader.readAsDataURL(file);
   });
 }
+
+/* =========================
+   PHOTO CROPPER (shared modal — index.html, complete-profile.html, profile.html)
+   Square, drag-to-reposition + zoom crop step for face/profile photos, so
+   the final photo is consistently square (2x2-ID-photo-style) and the
+   person can make sure their whole face is visible regardless of how the
+   original photo was framed. Not used for "Valid ID" document uploads —
+   those stay as full, uncropped photos of the ID itself.
+   ========================= */
+
+const photoCropModal = document.getElementById("photoCropModal");
+const photoCropViewport = document.getElementById("photoCropViewport");
+const photoCropImage = document.getElementById("photoCropImage");
+const photoCropZoom = document.getElementById("photoCropZoom");
+const photoCropConfirmBtn = document.getElementById("photoCropConfirmBtn");
+const photoCropCancelBtn = document.getElementById("photoCropCancelBtn");
+
+const PHOTO_CROP_VIEWPORT_SIZE = 280;
+const PHOTO_CROP_OUTPUT_SIZE = 500;
+
+let photoCropState = null; // { naturalWidth, naturalHeight, minScale, scale, offsetX, offsetY, onCropped }
+
+function clampPhotoCropOffsets() {
+  const { naturalWidth, naturalHeight, scale } = photoCropState;
+  const renderedWidth = naturalWidth * scale;
+  const renderedHeight = naturalHeight * scale;
+  const minOffsetX = Math.min(0, PHOTO_CROP_VIEWPORT_SIZE - renderedWidth);
+  const minOffsetY = Math.min(0, PHOTO_CROP_VIEWPORT_SIZE - renderedHeight);
+  photoCropState.offsetX = Math.min(0, Math.max(minOffsetX, photoCropState.offsetX));
+  photoCropState.offsetY = Math.min(0, Math.max(minOffsetY, photoCropState.offsetY));
+}
+
+function renderPhotoCropTransform() {
+  const { naturalWidth, naturalHeight, scale, offsetX, offsetY } = photoCropState;
+  photoCropImage.style.width = `${naturalWidth * scale}px`;
+  photoCropImage.style.height = `${naturalHeight * scale}px`;
+  photoCropImage.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+}
+
+// Opens the crop modal for `file`; calls onCropped(dataUrl) with the final
+// square JPEG once the person confirms. Never calls back if they cancel.
+function openPhotoCropper(file, onCropped) {
+  if (!photoCropModal) {
+    // Page doesn't have the crop modal (shouldn't happen for the three
+    // pages this is wired up on) — fail safe by skipping cropping.
+    onCropped(null);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onerror = () => alert("Couldn't read that file. Try again.");
+  reader.onload = () => {
+    const img = new Image();
+    img.onerror = () => alert("Couldn't load that image. Try a different file.");
+    img.onload = () => {
+      const minScale = PHOTO_CROP_VIEWPORT_SIZE / Math.min(img.naturalWidth, img.naturalHeight);
+      photoCropState = {
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight,
+        minScale,
+        scale: minScale,
+        offsetX: (PHOTO_CROP_VIEWPORT_SIZE - img.naturalWidth * minScale) / 2,
+        offsetY: (PHOTO_CROP_VIEWPORT_SIZE - img.naturalHeight * minScale) / 2,
+        onCropped
+      };
+      clampPhotoCropOffsets();
+      photoCropImage.src = reader.result;
+      photoCropZoom.value = 100;
+      renderPhotoCropTransform();
+      photoCropModal.classList.remove("hidden");
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+photoCropZoom?.addEventListener("input", () => {
+  if (!photoCropState) return;
+
+  const zoomFactor = photoCropZoom.value / 100; // slider 100..300 -> 1x..3x
+  const centerX = PHOTO_CROP_VIEWPORT_SIZE / 2;
+  const centerY = PHOTO_CROP_VIEWPORT_SIZE / 2;
+  // Keep whatever point is currently at the viewport's center anchored
+  // there while the zoom level changes, instead of zooming from a corner.
+  const oldScale = photoCropState.scale;
+  const imageCenterX = (centerX - photoCropState.offsetX) / oldScale;
+  const imageCenterY = (centerY - photoCropState.offsetY) / oldScale;
+
+  photoCropState.scale = photoCropState.minScale * zoomFactor;
+  photoCropState.offsetX = centerX - imageCenterX * photoCropState.scale;
+  photoCropState.offsetY = centerY - imageCenterY * photoCropState.scale;
+  clampPhotoCropOffsets();
+  renderPhotoCropTransform();
+});
+
+let photoCropDragging = false;
+let photoCropDragStart = { x: 0, y: 0 };
+let photoCropDragOrigin = { x: 0, y: 0 };
+
+function photoCropPointerDown(x, y) {
+  if (!photoCropState) return;
+  photoCropDragging = true;
+  photoCropDragStart = { x, y };
+  photoCropDragOrigin = { x: photoCropState.offsetX, y: photoCropState.offsetY };
+}
+
+function photoCropPointerMove(x, y) {
+  if (!photoCropDragging || !photoCropState) return;
+  photoCropState.offsetX = photoCropDragOrigin.x + (x - photoCropDragStart.x);
+  photoCropState.offsetY = photoCropDragOrigin.y + (y - photoCropDragStart.y);
+  clampPhotoCropOffsets();
+  renderPhotoCropTransform();
+}
+
+function photoCropPointerUp() {
+  photoCropDragging = false;
+}
+
+photoCropViewport?.addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  photoCropPointerDown(e.clientX, e.clientY);
+});
+document.addEventListener("mousemove", (e) => photoCropPointerMove(e.clientX, e.clientY));
+document.addEventListener("mouseup", photoCropPointerUp);
+
+photoCropViewport?.addEventListener("touchstart", (e) => {
+  const t = e.touches[0];
+  photoCropPointerDown(t.clientX, t.clientY);
+}, { passive: true });
+document.addEventListener("touchmove", (e) => {
+  if (!photoCropDragging) return;
+  const t = e.touches[0];
+  photoCropPointerMove(t.clientX, t.clientY);
+}, { passive: true });
+document.addEventListener("touchend", photoCropPointerUp);
+
+photoCropCancelBtn?.addEventListener("click", () => {
+  photoCropModal?.classList.add("hidden");
+  photoCropState = null;
+});
+
+photoCropConfirmBtn?.addEventListener("click", () => {
+  if (!photoCropState) return;
+
+  const { scale, offsetX, offsetY, onCropped } = photoCropState;
+  const sx = -offsetX / scale;
+  const sy = -offsetY / scale;
+  const sSize = PHOTO_CROP_VIEWPORT_SIZE / scale;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = PHOTO_CROP_OUTPUT_SIZE;
+  canvas.height = PHOTO_CROP_OUTPUT_SIZE;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(photoCropImage, sx, sy, sSize, sSize, 0, 0, PHOTO_CROP_OUTPUT_SIZE, PHOTO_CROP_OUTPUT_SIZE);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+  photoCropModal.classList.add("hidden");
+  photoCropState = null;
+  onCropped(dataUrl);
+});
 
 templateUploadForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -3537,7 +3693,11 @@ function renderIdApplicationStatus(data) {
         and ID below to be reviewed again.
       </p>
 
-      <label>Photo (clear front-facing photo)</label>
+      <label>Photo</label>
+      <p class="dashboard-subtext">
+        2x2 ID-style photo — square, plain background, your whole face
+        clearly visible. You'll be able to crop it after choosing a file.
+      </p>
       <input id="idResubmitPhotoFile" type="file" accept="image/png, image/jpeg">
       <img id="idResubmitPhotoPreview" class="template-preview hidden" alt="Photo preview">
 
@@ -3568,18 +3728,17 @@ function renderIdApplicationStatus(data) {
   let resubmitPhotoDataUrl = null;
   let resubmitDocDataUrl = null;
 
-  document.getElementById("idResubmitPhotoFile").addEventListener("change", async (e) => {
+  document.getElementById("idResubmitPhotoFile").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    try {
-      resubmitPhotoDataUrl = await compressImageToDataUrl(file);
+
+    openPhotoCropper(file, (dataUrl) => {
+      if (!dataUrl) return;
+      resubmitPhotoDataUrl = dataUrl;
       const preview = document.getElementById("idResubmitPhotoPreview");
-      preview.src = resubmitPhotoDataUrl;
+      preview.src = dataUrl;
       preview.classList.remove("hidden");
-    } catch (err) {
-      console.error("Photo processing failed:", err);
-      alert("Couldn't process that photo. Try a different image.");
-    }
+    });
   });
 
   document.getElementById("idResubmitDocFile").addEventListener("change", async (e) => {
