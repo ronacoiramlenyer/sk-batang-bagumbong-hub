@@ -2412,9 +2412,9 @@ if (usersList) {
           <div class="collapsible-header-text">
             ${u.photoData ? `<img class="id-app-thumb" src="${u.photoData}" alt="${fullNameSafe}">` : ""}
             <h3>${u.fullName ? fullNameSafe : "Unknown"}</h3>
-            <span class="status-badge ${isAdminRole(u.role) ? "status-ongoing" : idStatusBadgeClass(idStatus)}">
-              ${u.role === "superadmin" ? "SUPER ADMIN" : u.role === "admin" ? "ADMIN" : idStatus.toUpperCase()}
-            </span>
+            ${!isAdminRole(u.role) ? `
+              <span class="status-badge ${idStatusBadgeClass(idStatus)}">${idStatus.toUpperCase()}</span>
+            ` : ""}
             ${pendingRequest ? '<span class="status-badge status-archived">CHANGE REQUEST</span>' : ""}
           </div>
           <span class="collapsible-chevron">▾</span>
@@ -2869,15 +2869,13 @@ function renderIdApplicationsList() {
                 <span>Approve</span>
               </button>
 
-              ${currentUserRole === "superadmin" ? `
-                <button class="icon-btn archive"
-                  data-role="reject-id" data-id="${doc.id}" data-fullname="${appNameSafe}"
-                  ${status === "rejected" ? "disabled" : ""}
-                  title="Reject">
-                  ❌
-                  <span>Reject</span>
-                </button>
-              ` : ""}
+              <button class="icon-btn archive"
+                data-role="reject-id" data-id="${doc.id}" data-fullname="${appNameSafe}"
+                ${status === "rejected" ? "disabled" : ""}
+                title="Reject">
+                ❌
+                <span>Reject</span>
+              </button>
 
               <button class="icon-btn edit"
                 data-role="generate-id" data-id="${doc.id}"

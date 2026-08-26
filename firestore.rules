@@ -84,18 +84,10 @@ service cloud.firestore {
         request.resource.data.get('address', '') == resource.data.get('address', '') &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['idStatus', 'photoData', 'idDocumentData']);
 
-      // Admins can update any user doc — role, ID approval, applying an
-      // approved profile change request, etc. — EXCEPT rejecting an ID
-      // application (setting idStatus to 'rejected'), which is reserved
-      // for super admin. Detected by idStatus actually changing to
-      // 'rejected' in this write, not just already being 'rejected' from
-      // an earlier one (so a regular admin can still, say, approve a
-      // profile-change request for someone whose ID happens to be
-      // rejected, without that being mistaken for a reject action).
-      allow update: if isSuperAdmin() ||
-        (isAdmin() &&
-         !(request.resource.data.idStatus == 'rejected' &&
-           request.resource.data.diff(resource.data).affectedKeys().hasAny(['idStatus'])));
+      // Admins (regular or super) can update any user doc — role, ID
+      // approval or rejection, applying an approved profile change
+      // request, etc. Deleting a user (below) stays super-admin-only.
+      allow update: if isAdmin();
 
       // Deleting a user is reserved for super admin.
       allow delete: if isSuperAdmin();
@@ -217,12 +209,13 @@ service cloud.firestore {
       allow read, update: if isAdmin() ||
         (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // Starting a new thread — must be the owner's own userId, unless a
-      // super admin is opening one on a resident's behalf (the automatic
-      // "why you were rejected/removed" messages — both super-admin-only
-      // actions, so this matches).
+      // Starting a new thread — must be the owner's own userId, unless an
+      // admin is opening one on a resident's behalf (the automatic "why
+      // you were rejected/removed" messages — rejecting an ID is open to
+      // any admin; removing a registrant is super-admin-only, but that
+      // distinction is enforced on the registration write itself, not here).
       allow create: if isSignedIn() &&
-        (request.resource.data.userId == request.auth.uid || isSuperAdmin());
+        (request.resource.data.userId == request.auth.uid || isAdmin());
 
       allow delete: if isAdmin();
 
