@@ -45,6 +45,88 @@ function escapeHtml(value) {
 }
 
 /* =========================
+   ANNOUNCEMENT RICH TEXT (SANITIZED HTML)
+   Announcements are the one place this app stores real HTML (from a
+   contenteditable box, so line breaks/bold survive a paste) instead of
+   plain escaped text. That HTML is rendered to every resident, so it MUST
+   be run through DOMPurify with a tight allowlist before it's ever saved
+   or displayed — never trust it just because only admins can write it;
+   Firestore rules can't validate HTML content, so a compromised admin
+   account (or anyone hitting Firestore directly with its credentials)
+   could otherwise write a <script> straight into a field every user's
+   browser renders. Sanitizing again at render time (not just at save
+   time) is the actual security boundary — it's what makes this safe even
+   if that ever happened.
+   ========================= */
+const ANNOUNCEMENT_ALLOWED_TAGS = ["b", "strong", "i", "em", "u", "br", "p", "div"];
+
+// Word/Google Docs paste bold/italic/underline as inline styles on <span>
+// (e.g. style="font-weight:bold"), not semantic tags — plain DOMPurify
+// with a tag-only allowlist would just strip the span and silently lose
+// the formatting. This extracts that specific, recognized meaning into
+// safe tags BEFORE sanitizing, so the raw style attribute itself never
+// has to be allowed through at all (avoids CSS-injection risk entirely —
+// verified this can't be used to sneak a javascript:/expression() value
+// past sanitization, since only the parsed style properties are read,
+// never the original attribute string).
+function normalizeAnnouncementHtml(html) {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+
+  container.querySelectorAll("[style]").forEach((el) => {
+    const weight = (el.style.fontWeight || "").toString().toLowerCase();
+    const isBold = weight === "bold" || weight === "bolder" || (parseInt(weight, 10) || 0) >= 600;
+    const isItalic = (el.style.fontStyle || "").toLowerCase() === "italic";
+    const decoration = (el.style.textDecorationLine || el.style.textDecoration || "").toLowerCase();
+    const isUnderline = decoration.includes("underline");
+
+    let frag = document.createDocumentFragment();
+    while (el.firstChild) frag.appendChild(el.firstChild);
+
+    if (isBold) {
+      const b = document.createElement("strong");
+      b.appendChild(frag);
+      frag = document.createDocumentFragment();
+      frag.appendChild(b);
+    }
+    if (isItalic) {
+      const i = document.createElement("em");
+      i.appendChild(frag);
+      frag = document.createDocumentFragment();
+      frag.appendChild(i);
+    }
+    if (isUnderline) {
+      const u = document.createElement("u");
+      u.appendChild(frag);
+      frag = document.createDocumentFragment();
+      frag.appendChild(u);
+    }
+
+    if (el.tagName === "SPAN" || el.tagName === "FONT") {
+      el.replaceWith(frag);
+    } else {
+      el.removeAttribute("style");
+      el.appendChild(frag);
+    }
+  });
+
+  return container.innerHTML;
+}
+
+function sanitizeAnnouncementHtml(html) {
+  if (typeof DOMPurify === "undefined") {
+    // The sanitizer script failed to load — fail safe to plain escaped
+    // text rather than ever inserting unsanitized HTML.
+    console.error("DOMPurify unavailable; falling back to plain text.");
+    return escapeHtml(html);
+  }
+  return DOMPurify.sanitize(normalizeAnnouncementHtml(String(html ?? "")), {
+    ALLOWED_TAGS: ANNOUNCEMENT_ALLOWED_TAGS,
+    ALLOWED_ATTR: []
+  });
+}
+
+/* =========================
    LAST-NAME SORTING
    Simple, explicit rule: split the full name on spaces and treat the
    final word as the last name — used to sort user/registrant lists by
@@ -1271,10 +1353,10 @@ if (createAnnouncementForm) {
     const pinnedInput = document.getElementById("announcementPinned");
 
     const title = titleInput.value.trim();
-    const body = bodyInput.value.trim();
+    const body = sanitizeAnnouncementHtml(bodyInput.innerHTML);
     const pinned = pinnedInput.checked;
 
-    if (!title || !body) {
+    if (!title || !bodyInput.textContent.trim()) {
       alert("Please complete all required fields.");
       return;
     }
@@ -1295,6 +1377,7 @@ if (createAnnouncementForm) {
       });
 
       createAnnouncementForm.reset();
+      bodyInput.innerHTML = ""; // .reset() doesn't touch a contenteditable div
       alert("Announcement posted successfully.");
 
     } catch (err) {
@@ -1354,7 +1437,7 @@ if (adminAnnouncementList) {
           </div>
 
           <div class="collapsible-body">
-            <p class="announcement-text">${escapeHtml(announcement.body)}</p>
+            <div class="announcement-text">${sanitizeAnnouncementHtml(announcement.body)}</div>
             <p class="event-meta">Posted ${formatAnnouncementDate(announcement.createdAt)}</p>
 
             <div class="admin-actions horizontal">
@@ -1405,7 +1488,9 @@ document.addEventListener("click", async (e) => {
     const data = doc.data();
 
     editAnnouncementTitle.value = data.title || "";
-    editAnnouncementBody.value = data.body || "";
+    // Defensively re-sanitized even though it should already be clean from
+    // when it was saved — see sanitizeAnnouncementHtml's comment.
+    editAnnouncementBody.innerHTML = sanitizeAnnouncementHtml(data.body || "");
     editAnnouncementPinned.checked = !!data.pinned;
 
     editAnnouncementModal.classList.remove("hidden");
@@ -1423,10 +1508,15 @@ editAnnouncementForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!editingAnnouncementId) return;
 
+  if (!editAnnouncementBody.textContent.trim()) {
+    alert("Please write a message.");
+    return;
+  }
+
   try {
     await db.collection("announcements").doc(editingAnnouncementId).update({
       title: editAnnouncementTitle.value.trim(),
-      body: editAnnouncementBody.value.trim(),
+      body: sanitizeAnnouncementHtml(editAnnouncementBody.innerHTML),
       pinned: editAnnouncementPinned.checked
     });
 
@@ -1509,7 +1599,7 @@ if (announcementList) {
         card.className = "announcement-card";
 
         card.innerHTML = `
-          <p class="announcement-text">${escapeHtml(announcement.body)}</p>
+          <div class="announcement-text">${sanitizeAnnouncementHtml(announcement.body)}</div>
           <span class="announcement-date">Posted ${formatAnnouncementDate(announcement.createdAt)}</span>
         `;
 

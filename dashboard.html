@@ -77,6 +77,12 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
+  <!-- Sanitizer for rendering the rich-text announcement body — see the
+       note in app.js above ANNOUNCEMENT_ALLOWED_TAGS for why this is
+       required, not optional, since this renders admin-authored HTML to
+       every resident. -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
   <!-- App Logic -->
   <script src="app.js"></script>
 

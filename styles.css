@@ -329,6 +329,16 @@ button:active {
   margin: 0 0 6px;
 }
 
+.announcement-text p,
+.announcement-text div {
+  margin: 0 0 4px;
+}
+
+.announcement-text b,
+.announcement-text strong {
+  font-weight: bold;
+}
+
 .announcement-date {
   font-size: 12px;
   color: #777;
@@ -424,6 +434,29 @@ textarea {
   border: 1px solid #ccc;
   font-family: inherit;
   resize: vertical;
+}
+
+.rich-text-input {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px;
+  margin-top: 6px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.rich-text-input:empty:before {
+  content: attr(data-placeholder);
+  color: #999;
+}
+
+.rich-text-input b,
+.rich-text-input strong {
+  font-weight: bold;
 }
 
 
@@ -794,6 +827,16 @@ button:active {
   margin: 0 0 6px;
 }
 
+.announcement-text p,
+.announcement-text div {
+  margin: 0 0 4px;
+}
+
+.announcement-text b,
+.announcement-text strong {
+  font-weight: bold;
+}
+
 .announcement-date {
   font-size: 12px;
   color: #777;
@@ -889,6 +932,29 @@ textarea {
   border: 1px solid #ccc;
   font-family: inherit;
   resize: vertical;
+}
+
+.rich-text-input {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px;
+  margin-top: 6px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.rich-text-input:empty:before {
+  content: attr(data-placeholder);
+  color: #999;
+}
+
+.rich-text-input b,
+.rich-text-input strong {
+  font-weight: bold;
 }
 
 

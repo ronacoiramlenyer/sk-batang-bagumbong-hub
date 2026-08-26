@@ -5,7 +5,7 @@
   <title>Admin – Announcements</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
-</head>npm run dev
+</head>
 
 <body>
 
@@ -22,9 +22,12 @@
           placeholder="Barangay Office Advisory" required>
 
         <label>Message</label>
-        <textarea id="announcementBody"
-          placeholder="Write the announcement details here"
-          rows="5" required></textarea>
+        <p class="dashboard-subtext">
+          Line breaks and bold text are kept — paste from Word/Docs/etc. and
+          the formatting carries over.
+        </p>
+        <div id="announcementBody" class="rich-text-input" contenteditable="true"
+          data-placeholder="Write the announcement details here"></div>
 
         <label class="pinned-checkbox-label">
           <input type="checkbox" id="announcementPinned">
@@ -57,6 +60,11 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- Sanitizer for the rich-text announcement body — see the note in
+       app.js above ANNOUNCEMENT_ALLOWED_TAGS for why this is required,
+       not optional, before that HTML is ever stored or rendered. -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
   <!-- App Logic -->
   <script src="app.js"></script>
