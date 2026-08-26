@@ -87,7 +87,12 @@ let currentUserRole = null;
 // flicker missing on a fast page load.
 async function ensureCurrentUserRole() {
   if (currentUserRole !== null) return;
-  const user = auth.currentUser;
+  // auth.currentUser is unreliable here — Firebase Auth usually hasn't
+  // resolved the persisted session yet at the exact moment a page's script
+  // first runs, so checking it directly just found nothing and silently
+  // gave up almost every time. waitForUser() actually waits for
+  // onAuthStateChanged to fire with the real (or null) user.
+  const user = await waitForUser();
   if (!user) return;
   try {
     const doc = await db.collection("users").doc(user.uid).get();
