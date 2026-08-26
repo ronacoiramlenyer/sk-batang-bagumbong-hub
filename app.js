@@ -2532,27 +2532,39 @@ function idStatusBadgeClass(status) {
   return "status-ongoing";
 }
 
-if (idApplicationsList) {
-  // Regular users only — admins don't go through ID approval themselves.
-  db.collection("users")
-    .where("role", "==", "user")
-    .onSnapshot((snapshot) => {
+const idTabPendingCount = document.getElementById("idTabPendingCount");
+const idTabApprovedCount = document.getElementById("idTabApprovedCount");
+let idApplicationsTab = "pending"; // "pending" (includes rejected — still needs attention) or "approved"
+let cachedIdApplicants = [];
 
-      idApplicationsList.innerHTML = "";
+function renderIdApplicationsList() {
+  if (cachedIdApplicants.length === 0) {
+    idApplicationsList.innerHTML =
+      '<p class="dashboard-subtext">No completed applicant profiles yet.</p>';
+    idTabPendingCount.textContent = "";
+    idTabApprovedCount.textContent = "";
+    return;
+  }
 
-      // Only show users who've completed their profile (have ID-relevant data)
-      const applicants = snapshot.docs.filter((doc) => {
-        const u = doc.data();
-        return u.address && u.birthdate && u.contactNumber && u.photoData && u.idDocumentData;
-      });
+  const pendingCount = cachedIdApplicants.filter((doc) => (doc.data().idStatus || "pending") !== "approved").length;
+  const approvedCount = cachedIdApplicants.length - pendingCount;
+  idTabPendingCount.textContent = `(${pendingCount})`;
+  idTabApprovedCount.textContent = `(${approvedCount})`;
 
-      if (applicants.length === 0) {
-        idApplicationsList.innerHTML =
-          '<p class="dashboard-subtext">No completed applicant profiles yet.</p>';
-        return;
-      }
+  const applicants = cachedIdApplicants.filter((doc) => {
+    const status = doc.data().idStatus || "pending";
+    return idApplicationsTab === "approved" ? status === "approved" : status !== "approved";
+  });
 
-      applicants.forEach((doc) => {
+  idApplicationsList.innerHTML = "";
+
+  if (applicants.length === 0) {
+    idApplicationsList.innerHTML =
+      `<p class="dashboard-subtext">No ${idApplicationsTab} applicants.</p>`;
+    return;
+  }
+
+  applicants.forEach((doc) => {
         const app = doc.data();
         const status = app.idStatus || "pending";
 
@@ -2614,8 +2626,30 @@ if (idApplicationsList) {
           </div>
         `;
 
-        idApplicationsList.appendChild(card);
+    idApplicationsList.appendChild(card);
+  });
+}
+
+if (idApplicationsList) {
+  document.querySelectorAll(".id-tab-btn").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      idApplicationsTab = tabBtn.dataset.tab;
+      document.querySelectorAll(".id-tab-btn").forEach((b) => b.classList.remove("active"));
+      tabBtn.classList.add("active");
+      renderIdApplicationsList();
+    });
+  });
+
+  // Regular users only — admins don't go through ID approval themselves.
+  db.collection("users")
+    .where("role", "==", "user")
+    .onSnapshot((snapshot) => {
+      // Only cache users who've completed their profile (have ID-relevant data)
+      cachedIdApplicants = snapshot.docs.filter((doc) => {
+        const u = doc.data();
+        return u.address && u.birthdate && u.contactNumber && u.photoData && u.idDocumentData;
       });
+      renderIdApplicationsList();
     }, (err) => {
       console.error("Failed to load ID applicants:", err);
       idApplicationsList.innerHTML =
