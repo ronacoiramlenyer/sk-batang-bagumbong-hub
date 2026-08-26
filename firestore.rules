@@ -196,21 +196,17 @@ service cloud.firestore {
     // ---------------------------
     // userDirectory/{userId}  (doc ID == the user's uid)
     // Minimal public-to-signed-in-users name index — holds ONLY fullName
-    // and a precomputed array of searchable name-part prefixes (nameTokens).
-    // Nothing else about a user lives here; this exists purely so a
-    // resident can find another resident by name to start a direct
-    // message, without exposing the rest of their profile (address,
-    // contact, ID photos, etc. stay locked to users/{userId} as before).
+    // (plus a lowercased copy for prefix search). Nothing else about a user
+    // lives here; this exists purely so a resident can find another
+    // resident by name to start a direct message, without exposing the
+    // rest of their profile (address, contact, ID photos, etc. stay
+    // locked to users/{userId} as before).
     // ---------------------------
     match /userDirectory/{userId} {
       allow read: if isSignedIn();
-      // Normally created by the user themselves at signup. Admins can also
-      // create one — needed for the one-time "rebuild directory" backfill
-      // covering accounts registered before this feature existed.
-      allow create: if (isOwner(userId) || isAdmin()) &&
-        request.resource.data.keys().hasOnly(['fullName', 'nameTokens']);
-      // Only changes via an approved profileChangeRequests name update, or
-      // the backfill above re-syncing an existing entry.
+      allow create: if isOwner(userId) &&
+        request.resource.data.keys().hasOnly(['fullName', 'fullNameLower']);
+      // Only changes via an approved profileChangeRequests name update.
       allow update: if isAdmin();
       // Cleanup when an admin deletes the user.
       allow delete: if isAdmin();

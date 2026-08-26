@@ -45,24 +45,6 @@ function escapeHtml(value) {
 }
 
 /* =========================
-   NAME SEARCH TOKENS (for the "message a resident" name search)
-   Rather than guess which word in a full name is the "last name" (unsafe
-   to assume with multi-part or hyphenated Filipino names), every word gets
-   indexed by all of its own prefixes — so searching any part of the name,
-   not just the first word, finds a match as the searcher types.
-   ========================= */
-function buildNameTokens(fullName) {
-  const words = String(fullName || "").toLowerCase().split(/\s+/).filter(Boolean);
-  const tokens = new Set();
-  words.forEach((word) => {
-    for (let i = 1; i <= word.length; i++) {
-      tokens.add(word.slice(0, i));
-    }
-  });
-  return Array.from(tokens);
-}
-
-/* =========================
    PAGE DETECTION
    ========================= */
 
@@ -217,7 +199,7 @@ registerForm?.addEventListener("submit", async (e) => {
     // write above rather than failing the whole signup if this hiccups.
     db.collection("userDirectory").doc(cred.user.uid).set({
       fullName: newFullName,
-      nameTokens: buildNameTokens(newFullName)
+      fullNameLower: newFullName.toLowerCase()
     }).catch((err) => console.error("Failed to create directory entry:", err));
 
     window.location.href = "dashboard.html";
@@ -2110,42 +2092,6 @@ if (usersList) {
       rows
     );
   });
-
-  // One-time (repeatable, harmless to re-run) fix-up: (re)writes a
-  // userDirectory entry for every user, so accounts registered before the
-  // "message a resident" feature existed become name-searchable too.
-  const rebuildDirectoryBtn = document.getElementById("rebuildDirectoryBtn");
-  rebuildDirectoryBtn?.addEventListener("click", async () => {
-    if (cachedUsers.length === 0) {
-      alert("No users loaded yet.");
-      return;
-    }
-    if (!confirm(`Rebuild the name directory for ${cachedUsers.length} user(s)?`)) return;
-
-    rebuildDirectoryBtn.disabled = true;
-    rebuildDirectoryBtn.textContent = "Rebuilding…";
-
-    let succeeded = 0;
-    let failed = 0;
-
-    for (const doc of cachedUsers) {
-      const u = doc.data();
-      try {
-        await db.collection("userDirectory").doc(doc.id).set({
-          fullName: u.fullName || "",
-          nameTokens: buildNameTokens(u.fullName)
-        }, { merge: true });
-        succeeded++;
-      } catch (err) {
-        console.error(`Failed to rebuild directory entry for ${doc.id}:`, err);
-        failed++;
-      }
-    }
-
-    rebuildDirectoryBtn.disabled = false;
-    rebuildDirectoryBtn.textContent = "Rebuild Name Directory";
-    alert(`Done. ${succeeded} updated${failed ? `, ${failed} failed (see console).` : "."}`);
-  });
 }
 
 
@@ -2241,7 +2187,7 @@ document.addEventListener("click", async (e) => {
       // directory-sync hiccup never blocks the actual approval.
       db.collection("userDirectory").doc(userId).set({
         fullName: requested.fullName,
-        nameTokens: buildNameTokens(requested.fullName)
+        fullNameLower: (requested.fullName || "").toLowerCase()
       }, { merge: true }).catch((err) => console.error("Failed to sync directory entry:", err));
     } else {
       await db.collection("profileChangeRequests").doc(userId).update({
@@ -3685,11 +3631,9 @@ dmChatSendForm?.addEventListener("submit", async (e) => {
   }
 });
 
-// Search-as-you-type by name, via an array-contains match against each
-// person's precomputed nameTokens (every prefix of every word in their
-// name — see buildNameTokens) — matches on first, middle, or last name,
-// not just the start of the full string. Single-field array-contains
-// query, so it needs no composite Firestore index.
+// Search-as-you-type by name, via a prefix range query on userDirectory's
+// lowercased name — a single-field range query, so it needs no composite
+// Firestore index.
 let dmSearchDebounce = null;
 
 dmSearchInput?.addEventListener("input", () => {
@@ -3707,7 +3651,8 @@ dmSearchInput?.addEventListener("input", () => {
 
     try {
       const snap = await db.collection("userDirectory")
-        .where("nameTokens", "array-contains", term)
+        .where("fullNameLower", ">=", term)
+        .where("fullNameLower", "<=", term + "")
         .limit(10)
         .get();
 
