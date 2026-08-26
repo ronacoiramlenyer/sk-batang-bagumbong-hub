@@ -2840,9 +2840,23 @@ async function refreshMyRegistrations() {
   });
 }
 
+// Residents can't join any event until their SK ID application is
+// approved (admins are exempt — they don't go through that process).
+// Enforced both here (for a clear message instead of a dead click) and,
+// authoritatively, in firestore.rules on the registration create itself.
+let myIdApprovedOrAdmin = false;
+
 if (userEventList) {
   waitForUser().then(async (user) => {
     if (!user) return;
+
+    try {
+      const userDoc = await db.collection("users").doc(user.uid).get();
+      const userData = userDoc.exists ? userDoc.data() : {};
+      myIdApprovedOrAdmin = userData.role === "admin" || userData.idStatus === "approved";
+    } catch (err) {
+      console.error("Failed to load ID approval status:", err);
+    }
 
     await refreshMyRegistrations();
 
@@ -2873,6 +2887,10 @@ if (userEventList) {
           const isRemoved = myRemovedEventIds.has(doc.id);
           const capacityInfo = getCapacityInfo(event);
           const isFull = capacityInfo.isFull && !isJoined;
+          // Only gates NEW joins — already-joined people keep showing
+          // "Joined ✓" above regardless of their current ID status, so
+          // this never touches existing registrants.
+          const needsApproval = !isJoined && !myIdApprovedOrAdmin;
 
           const card = document.createElement("div");
           card.className = "event-card";
@@ -2880,6 +2898,7 @@ if (userEventList) {
           let buttonLabel = "Join Event";
           if (isJoined) buttonLabel = "Joined ✓";
           else if (isRemoved) buttonLabel = "Removed";
+          else if (needsApproval) buttonLabel = "ID approval required";
           else if (isFull) buttonLabel = "Full";
 
           card.innerHTML = `
@@ -2893,7 +2912,12 @@ if (userEventList) {
                 👥 You were removed from this event — see Messages for why, or reply there to have it reconsidered.
               </p>
             ` : ""}
-            ${capacityInfo.hasLimit && !isJoined && !isRemoved ? `
+            ${needsApproval && !isRemoved ? `
+              <p class="event-meta">
+                👥 Your SK Barangay ID needs to be approved before you can join events — check your Profile page.
+              </p>
+            ` : ""}
+            ${capacityInfo.hasLimit && !isJoined && !isRemoved && !needsApproval ? `
               <p class="event-meta">
                 ${isFull ? "👥 Event full" : `👥 ${capacityInfo.remaining} slot${capacityInfo.remaining === 1 ? "" : "s"} left`}
               </p>
@@ -2902,7 +2926,7 @@ if (userEventList) {
             <button type="button"
               class="action-card small"
               data-id="${doc.id}"
-              ${isJoined || isFull || isRemoved ? "disabled" : ""}>
+              ${isJoined || isFull || isRemoved || needsApproval ? "disabled" : ""}>
               ${buttonLabel}
             </button>
           `;
@@ -2929,6 +2953,16 @@ document.addEventListener("click", async (e) => {
   try {
     const userDoc = await db.collection("users").doc(user.uid).get();
     const userData = userDoc.exists ? userDoc.data() : {};
+
+    // Belt-and-suspenders re-check (the button's disabled state already
+    // covers the normal case) — the actual enforcement is the Firestore
+    // rule on the registration create itself.
+    if (userData.role !== "admin" && userData.idStatus !== "approved") {
+      alert("Your SK Barangay ID needs to be approved before you can join events.");
+      btn.disabled = false;
+      btn.textContent = "ID approval required";
+      return;
+    }
 
     // Deterministic ID (eventId_userId) — a second write attempt on an
     // existing registration is blocked by security rules (only admins

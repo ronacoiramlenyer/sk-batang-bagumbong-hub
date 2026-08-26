@@ -143,9 +143,16 @@ service cloud.firestore {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // A user can only create a registration for themselves.
+      // A user can only create a registration for themselves, and only
+      // once their SK Barangay ID is approved (admins are exempt — they
+      // don't go through that process). This is the authoritative check;
+      // the app also disables the Join button client-side for a clean
+      // message instead of a dead click, but this is what actually stops
+      // someone from bypassing that by calling Firestore directly.
       allow create: if isSignedIn() &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        (isAdmin() ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.idStatus == 'approved');
 
       // Only admins can update (e.g. marking attendance).
       allow update: if isAdmin();
