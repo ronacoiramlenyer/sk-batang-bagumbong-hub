@@ -195,13 +195,13 @@ button:active {
   text-align: left;
 }
 
-.id-tabs {
+.admin-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-.id-tab-btn {
+.admin-tab-btn {
   flex: 1;
   padding: 10px;
   border: 1px solid rgba(0,0,0,0.15);
@@ -213,13 +213,13 @@ button:active {
   cursor: pointer;
 }
 
-.id-tab-btn.active {
+.admin-tab-btn.active {
   background: var(--orange-primary, #f57c00);
   color: white;
   border-color: transparent;
 }
 
-.id-tab-count {
+.admin-tab-count {
   font-weight: normal;
   opacity: 0.85;
 }
@@ -660,13 +660,13 @@ button:active {
   text-align: left;
 }
 
-.id-tabs {
+.admin-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-.id-tab-btn {
+.admin-tab-btn {
   flex: 1;
   padding: 10px;
   border: 1px solid rgba(0,0,0,0.15);
@@ -678,13 +678,13 @@ button:active {
   cursor: pointer;
 }
 
-.id-tab-btn.active {
+.admin-tab-btn.active {
   background: var(--orange-primary, #f57c00);
   color: white;
   border-color: transparent;
 }
 
-.id-tab-count {
+.admin-tab-count {
   font-weight: normal;
   opacity: 0.85;
 }

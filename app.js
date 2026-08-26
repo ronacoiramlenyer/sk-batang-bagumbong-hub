@@ -2343,20 +2343,55 @@ if (adminAddressRequestBadge) {
    ========================= */
 
 const usersList = document.getElementById("usersList");
+const userTabPendingCount = document.getElementById("userTabPendingCount");
+const userTabApprovedCount = document.getElementById("userTabApprovedCount");
+let usersTab = "pending";
+
+// Staff accounts (admin/superadmin) are always considered "approved" here —
+// they don't go through ID review, so they'd never otherwise leave Pending.
+function isApprovedUserDoc(doc) {
+  const u = doc.data();
+  return isAdminRole(u.role) || u.idStatus === "approved";
+}
 
 if (usersList) {
   let cachedUsers = [];
   let pendingProfileRequestsByUser = new Map();
 
+  document.querySelectorAll(".admin-tab-btn").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      usersTab = tabBtn.dataset.tab;
+      document.querySelectorAll(".admin-tab-btn").forEach((b) => b.classList.remove("active"));
+      tabBtn.classList.add("active");
+      renderUsersList();
+    });
+  });
+
   function renderUsersList() {
     if (cachedUsers.length === 0) {
       usersList.innerHTML = '<p class="dashboard-subtext">No users yet.</p>';
+      if (userTabPendingCount) userTabPendingCount.textContent = "";
+      if (userTabApprovedCount) userTabApprovedCount.textContent = "";
       return;
     }
 
+    const approvedCount = cachedUsers.filter(isApprovedUserDoc).length;
+    const pendingCount = cachedUsers.length - approvedCount;
+    if (userTabPendingCount) userTabPendingCount.textContent = `(${pendingCount})`;
+    if (userTabApprovedCount) userTabApprovedCount.textContent = `(${approvedCount})`;
+
+    const visibleUsers = cachedUsers.filter((doc) =>
+      usersTab === "approved" ? isApprovedUserDoc(doc) : !isApprovedUserDoc(doc)
+    );
+
     usersList.innerHTML = "";
 
-    cachedUsers.forEach((doc) => {
+    if (visibleUsers.length === 0) {
+      usersList.innerHTML = `<p class="dashboard-subtext">No ${usersTab} users.</p>`;
+      return;
+    }
+
+    visibleUsers.forEach((doc) => {
       const u = doc.data();
       const pendingRequest = pendingProfileRequestsByUser.get(doc.id);
       const idStatus = u.idStatus || "pending";
@@ -2855,10 +2890,10 @@ function renderIdApplicationsList() {
 }
 
 if (idApplicationsList) {
-  document.querySelectorAll(".id-tab-btn").forEach((tabBtn) => {
+  document.querySelectorAll(".admin-tab-btn").forEach((tabBtn) => {
     tabBtn.addEventListener("click", () => {
       idApplicationsTab = tabBtn.dataset.tab;
-      document.querySelectorAll(".id-tab-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".admin-tab-btn").forEach((b) => b.classList.remove("active"));
       tabBtn.classList.add("active");
       renderIdApplicationsList();
     });

@@ -24,6 +24,15 @@
         Export CSV
       </button>
 
+      <div class="admin-tabs">
+        <button type="button" class="admin-tab-btn active" data-tab="pending">
+          Pending <span id="userTabPendingCount" class="admin-tab-count"></span>
+        </button>
+        <button type="button" class="admin-tab-btn" data-tab="approved">
+          Approved <span id="userTabApprovedCount" class="admin-tab-count"></span>
+        </button>
+      </div>
+
       <div id="usersList" class="event-list">
         <p class="dashboard-subtext">Loading…</p>
       </div>
