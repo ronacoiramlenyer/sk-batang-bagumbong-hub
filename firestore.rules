@@ -193,6 +193,60 @@ service cloud.firestore {
       }
     }
 
+    // ---------------------------
+    // userDirectory/{userId}  (doc ID == the user's uid)
+    // Minimal public-to-signed-in-users name index — holds ONLY fullName
+    // (plus a lowercased copy for prefix search). Nothing else about a user
+    // lives here; this exists purely so a resident can find another
+    // resident by name to start a direct message, without exposing the
+    // rest of their profile (address, contact, ID photos, etc. stay
+    // locked to users/{userId} as before).
+    // ---------------------------
+    match /userDirectory/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) &&
+        request.resource.data.keys().hasOnly(['fullName', 'fullNameLower']);
+      // Only changes via an approved profileChangeRequests name update.
+      allow update: if isAdmin();
+      // Cleanup when an admin deletes the user.
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------
+    // directMessages/{threadId}  (doc ID == the two participants' uids,
+    // sorted and joined — deterministic, so there's only ever one thread
+    // per pair). directMessages/{threadId}/messages/{messageId}.
+    // Fully private between the two participants — deliberately no
+    // isAdmin() branch anywhere in this block, unlike every other
+    // collection in this file. The SK office has no access to these.
+    // ---------------------------
+    match /directMessages/{threadId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.participants.size() == 2;
+
+      // Participants list itself can't change after creation — only
+      // metadata like lastMessageText/lastMessageAt/unread can.
+      allow update: if isSignedIn() &&
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.participants == resource.data.participants;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/directMessages/$(threadId)).data.participants;
+
+        allow create: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/directMessages/$(threadId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+
+        allow update, delete: if false;
+      }
+    }
+
     // Default deny for anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;
