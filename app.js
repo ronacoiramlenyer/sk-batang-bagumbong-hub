@@ -1978,27 +1978,53 @@ printRegistrantsBtn?.addEventListener("click", () => {
 });
 
 // Export registrant list to CSV
-exportRegistrantsBtn?.addEventListener("click", () => {
+exportRegistrantsBtn?.addEventListener("click", async () => {
   if (activeRegistrantsData.length === 0) {
     alert("No registrants to export.");
     return;
   }
 
   const eventTitle = activeRegistrantsEventData?.title || "event";
+  const originalLabel = exportRegistrantsBtn.textContent;
+  exportRegistrantsBtn.disabled = true;
+  exportRegistrantsBtn.textContent = "Exporting…";
 
-  const rows = activeRegistrantsData.map((reg) => [
-    reg.fullName || "",
-    reg.email || "",
-    reg.attended ? "Yes" : "No",
-    csvCellDate(reg.registeredAt),
-    reg.attended ? csvCellDate(reg.checkedInAt) : ""
-  ]);
+  try {
+    // Address/contact live on the user doc, not the registration itself —
+    // fetched fresh here (rather than relying on a snapshot taken at join
+    // time) so the export reflects their current details.
+    const userDocs = await Promise.all(
+      activeRegistrantsData.map((reg) =>
+        reg.userId ? db.collection("users").doc(reg.userId).get().catch(() => null) : Promise.resolve(null)
+      )
+    );
 
-  downloadCsv(
-    `Registrants-${safeFilenamePart(eventTitle)}.csv`,
-    ["Full Name", "Email", "Attended", "Registered At", "Checked In At"],
-    rows
-  );
+    const rows = activeRegistrantsData.map((reg, i) => {
+      const userDoc = userDocs[i];
+      const userData = userDoc && userDoc.exists ? userDoc.data() : {};
+      return [
+        reg.fullName || "",
+        reg.email || "",
+        userData?.address || "",
+        userData?.contactNumber || "",
+        reg.attended ? "Yes" : "No",
+        csvCellDate(reg.registeredAt),
+        reg.attended ? csvCellDate(reg.checkedInAt) : ""
+      ];
+    });
+
+    downloadCsv(
+      `Registrants-${safeFilenamePart(eventTitle)}.csv`,
+      ["Full Name", "Email", "Address", "Contact Number", "Attended", "Registered At", "Checked In At"],
+      rows
+    );
+  } catch (err) {
+    console.error("Failed to export registrants:", err);
+    alert("Failed to export registrants. Please try again.");
+  } finally {
+    exportRegistrantsBtn.disabled = false;
+    exportRegistrantsBtn.textContent = originalLabel;
+  }
 });
 
 // Generate a single certificate
