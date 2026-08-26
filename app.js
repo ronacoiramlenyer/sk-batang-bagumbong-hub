@@ -179,10 +179,8 @@ registerForm?.addEventListener("submit", async (e) => {
       regPassword.value
     );
 
-    const newFullName = fullName.value.trim();
-
     await db.collection("users").doc(cred.user.uid).set({
-      fullName: newFullName,
+      fullName: fullName.value.trim(),
       email: regEmail.value.trim(),
       address: regAddress.value.trim(),
       birthdate: regBirthdate.value,
@@ -193,14 +191,6 @@ registerForm?.addEventListener("submit", async (e) => {
       idStatus: "pending",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-
-    // Best-effort: powers the "message a resident" name search. Not
-    // critical to registration succeeding, so it's kept separate from the
-    // write above rather than failing the whole signup if this hiccups.
-    db.collection("userDirectory").doc(cred.user.uid).set({
-      fullName: newFullName,
-      fullNameLower: newFullName.toLowerCase()
-    }).catch((err) => console.error("Failed to create directory entry:", err));
 
     window.location.href = "dashboard.html";
 
@@ -241,8 +231,7 @@ const AUTH_REQUIRED_PAGES = [
   "dashboard.html",
   "complete-profile.html",
   "messages.html",
-  "profile.html",
-  "dm.html"
+  "profile.html"
 ];
 
 function isProfileComplete(userData) {
@@ -2131,11 +2120,9 @@ confirmDeleteUserBtn?.addEventListener("click", async () => {
   try {
     await db.collection("users").doc(deletingUserId).delete();
 
-    // Best-effort cleanup of any pending profile change request, and the
-    // directory entry that powers name search for DMs — neither is
-    // required for the deletion itself to succeed.
+    // Best-effort cleanup of any pending profile change request tied to
+    // this user — not required for the deletion to succeed.
     db.collection("profileChangeRequests").doc(deletingUserId).delete().catch(() => {});
-    db.collection("userDirectory").doc(deletingUserId).delete().catch(() => {});
 
     deleteUserModal?.classList.add("hidden");
     deletingUserId = null;
@@ -2177,18 +2164,6 @@ document.addEventListener("click", async (e) => {
         reviewedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       await batch.commit();
-
-      // Best-effort, kept out of the batch above on purpose: a legacy
-      // account from before this feature existed has no userDirectory doc
-      // yet, and an admin-authored .set() on a not-yet-existing doc reads
-      // as a "create" to the rules (which requires being the doc's own
-      // owner) — that would fail and, being in the same batch, would take
-      // the whole approval down with it. Keeping it separate means a
-      // directory-sync hiccup never blocks the actual approval.
-      db.collection("userDirectory").doc(userId).set({
-        fullName: requested.fullName,
-        fullNameLower: (requested.fullName || "").toLowerCase()
-      }, { merge: true }).catch((err) => console.error("Failed to sync directory entry:", err));
     } else {
       await db.collection("profileChangeRequests").doc(userId).update({
         status: "rejected",
@@ -3480,261 +3455,5 @@ if (isAdminPreview && backToAdminBtn) {
 
   backToAdminBtn.addEventListener("click", () => {
     window.location.href = "admin.html";
-  });
-}
-
-
-/* =========================
-   DIRECT MESSAGES BETWEEN RESIDENTS (dm.html)
-   Deliberately separate from the SK-office threads/messages collections
-   above — a new directMessages collection with no admin access at all
-   (see firestore.rules), so none of this touches or risks the existing
-   admin-facing messaging feature. Everything below is gated behind
-   elements that only exist on dm.html.
-   ========================= */
-
-const dmSearchInput = document.getElementById("dmSearchInput");
-const dmSearchResults = document.getElementById("dmSearchResults");
-const dmThreadsList = document.getElementById("dmThreadsList");
-const dmChatModal = document.getElementById("dmChatModal");
-const dmChatWithName = document.getElementById("dmChatWithName");
-const dmChatThread = document.getElementById("dmChatThread");
-const dmChatSendForm = document.getElementById("dmChatSendForm");
-const dmChatMessageInput = document.getElementById("dmChatMessageInput");
-const closeDmChatModal = document.getElementById("closeDmChatModal");
-
-function dmThreadId(uidA, uidB) {
-  return [uidA, uidB].sort().join("_");
-}
-
-function renderDmBubbles(container, messages, myUid) {
-  container.innerHTML = "";
-
-  if (messages.length === 0) {
-    container.innerHTML = '<p class="dashboard-subtext">No messages yet. Say hello!</p>';
-    return;
-  }
-
-  messages.forEach((msg) => {
-    const isMine = msg.senderId === myUid;
-
-    const wrapper = document.createElement("div");
-    wrapper.className = `chat-bubble-wrapper ${isMine ? "chat-bubble-wrapper-mine" : "chat-bubble-wrapper-theirs"}`;
-
-    const bubble = document.createElement("div");
-    bubble.className = `chat-bubble ${isMine ? "chat-bubble-mine" : "chat-bubble-theirs"}`;
-    bubble.textContent = msg.text;
-
-    const timeLabel = document.createElement("span");
-    timeLabel.className = "chat-timestamp";
-    timeLabel.textContent = formatMessageTime(msg.sentAt);
-
-    wrapper.appendChild(bubble);
-    wrapper.appendChild(timeLabel);
-    container.appendChild(wrapper);
-  });
-
-  container.scrollTop = container.scrollHeight;
-}
-
-let activeDmThreadId = null;
-let activeDmUnsubscribe = null;
-
-async function openDmThread(otherUid, otherName) {
-  const user = auth.currentUser;
-  if (!user || !dmChatModal) return;
-
-  const threadId = dmThreadId(user.uid, otherUid);
-  activeDmThreadId = threadId;
-
-  dmChatWithName.textContent = otherName || "Conversation";
-  dmChatThread.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
-  dmChatModal.classList.remove("hidden");
-
-  const threadRef = db.collection("directMessages").doc(threadId);
-
-  try {
-    const threadDoc = await threadRef.get();
-    if (!threadDoc.exists) {
-      const myDoc = await db.collection("users").doc(user.uid).get();
-      const myName = myDoc.exists ? (myDoc.data().fullName || "") : "";
-
-      await threadRef.set({
-        participants: [user.uid, otherUid].sort(),
-        participantNames: { [user.uid]: myName, [otherUid]: otherName || "" },
-        lastMessageText: "",
-        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-  } catch (err) {
-    console.error("Failed to open conversation:", err);
-    dmChatThread.innerHTML = '<p class="dashboard-subtext">Couldn\'t open this conversation.</p>';
-    return;
-  }
-
-  if (activeDmUnsubscribe) activeDmUnsubscribe();
-
-  activeDmUnsubscribe = threadRef.collection("messages")
-    .orderBy("sentAt", "asc")
-    .onSnapshot((snapshot) => {
-      const messages = snapshot.docs.map((d) => d.data());
-      renderDmBubbles(dmChatThread, messages, user.uid);
-    }, (err) => {
-      console.error("Failed to load messages:", err);
-      dmChatThread.innerHTML = '<p class="dashboard-subtext">Failed to load messages.</p>';
-    });
-}
-
-closeDmChatModal?.addEventListener("click", () => {
-  dmChatModal?.classList.add("hidden");
-  if (activeDmUnsubscribe) {
-    activeDmUnsubscribe();
-    activeDmUnsubscribe = null;
-  }
-  activeDmThreadId = null;
-});
-
-dmChatSendForm?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (!activeDmThreadId) return;
-
-  const user = auth.currentUser;
-  if (!user) return;
-
-  const text = dmChatMessageInput.value.trim();
-  if (!text) return;
-
-  const sendBtn = dmChatSendForm.querySelector("button[type='submit']");
-  sendBtn.disabled = true;
-
-  try {
-    const threadRef = db.collection("directMessages").doc(activeDmThreadId);
-
-    await threadRef.collection("messages").add({
-      senderId: user.uid,
-      text,
-      sentAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    await threadRef.update({
-      lastMessageText: text,
-      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    dmChatMessageInput.value = "";
-  } catch (err) {
-    console.error("Failed to send message:", err);
-    alert("Couldn't send that message. Please try again.");
-  } finally {
-    sendBtn.disabled = false;
-  }
-});
-
-// Search-as-you-type by name, via a prefix range query on userDirectory's
-// lowercased name — a single-field range query, so it needs no composite
-// Firestore index.
-let dmSearchDebounce = null;
-
-dmSearchInput?.addEventListener("input", () => {
-  clearTimeout(dmSearchDebounce);
-  const term = dmSearchInput.value.trim().toLowerCase();
-
-  if (!term) {
-    dmSearchResults.innerHTML = "";
-    return;
-  }
-
-  dmSearchDebounce = setTimeout(async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    try {
-      const snap = await db.collection("userDirectory")
-        .where("fullNameLower", ">=", term)
-        .where("fullNameLower", "<=", term + "")
-        .limit(10)
-        .get();
-
-      dmSearchResults.innerHTML = "";
-
-      const results = snap.docs.filter((d) => d.id !== user.uid);
-
-      if (results.length === 0) {
-        dmSearchResults.innerHTML = '<p class="dashboard-subtext">No matches.</p>';
-        return;
-      }
-
-      results.forEach((doc) => {
-        const data = doc.data();
-        const row = document.createElement("div");
-        row.className = "convo-row";
-        row.innerHTML = `
-          <div class="convo-avatar">💬</div>
-          <div class="convo-body">
-            <span class="convo-name">${escapeHtml(data.fullName || "Unknown")}</span>
-          </div>
-        `;
-        row.addEventListener("click", () => {
-          dmSearchInput.value = "";
-          dmSearchResults.innerHTML = "";
-          openDmThread(doc.id, data.fullName || "");
-        });
-        dmSearchResults.appendChild(row);
-      });
-    } catch (err) {
-      console.error("Search failed:", err);
-      dmSearchResults.innerHTML = '<p class="dashboard-subtext">Search failed.</p>';
-    }
-  }, 300);
-});
-
-// Conversation list — client-side sort (rather than orderBy + array-contains)
-// avoids needing a composite Firestore index, same reasoning as the
-// SK-office thread list above.
-if (dmThreadsList) {
-  waitForUser().then((user) => {
-    if (!user) return;
-
-    db.collection("directMessages")
-      .where("participants", "array-contains", user.uid)
-      .onSnapshot((snapshot) => {
-        dmThreadsList.innerHTML = "";
-
-        if (snapshot.empty) {
-          dmThreadsList.innerHTML = '<p class="dashboard-subtext">No conversations yet.</p>';
-          return;
-        }
-
-        const docs = snapshot.docs.slice().sort((a, b) =>
-          (b.data().lastMessageAt?.toMillis?.() || 0) - (a.data().lastMessageAt?.toMillis?.() || 0)
-        );
-
-        docs.forEach((doc) => {
-          const thread = doc.data();
-          const otherUid = (thread.participants || []).find((id) => id !== user.uid);
-          const otherName = (thread.participantNames || {})[otherUid] || "Unknown";
-
-          const row = document.createElement("div");
-          row.className = "convo-row";
-
-          row.innerHTML = `
-            <div class="convo-avatar">💬</div>
-            <div class="convo-body">
-              <div class="convo-top-line">
-                <span class="convo-name">${escapeHtml(otherName)}</span>
-                <span class="convo-time">${formatRelativeTime(thread.lastMessageAt)}</span>
-              </div>
-              <p class="convo-preview">${escapeHtml(thread.lastMessageText || "No messages yet")}</p>
-            </div>
-          `;
-
-          row.addEventListener("click", () => openDmThread(otherUid, otherName));
-          dmThreadsList.appendChild(row);
-        });
-      }, (err) => {
-        console.error("Failed to load conversations:", err);
-        dmThreadsList.innerHTML = '<p class="dashboard-subtext">Failed to load conversations.</p>';
-      });
   });
 }
