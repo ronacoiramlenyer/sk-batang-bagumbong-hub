@@ -2569,10 +2569,13 @@ function renderIdApplicationsList() {
   idTabPendingCount.textContent = `(${pendingCount})`;
   idTabApprovedCount.textContent = `(${approvedCount})`;
 
-  const applicants = cachedIdApplicants.filter((doc) => {
-    const status = doc.data().idStatus || "pending";
-    return idApplicationsTab === "approved" ? status === "approved" : status !== "approved";
-  });
+  const applicants = sortByLastName(
+    cachedIdApplicants.filter((doc) => {
+      const status = doc.data().idStatus || "pending";
+      return idApplicationsTab === "approved" ? status === "approved" : status !== "approved";
+    }),
+    (doc) => doc.data().fullName
+  );
 
   idApplicationsList.innerHTML = "";
 
