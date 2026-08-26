@@ -1670,6 +1670,15 @@ document.addEventListener("click", async (e) => {
               title="${reg.attended ? "Generate certificate" : "Mark attended first"}">
               🎓 Certificate
             </button>
+            <button type="button"
+              class="cert-btn"
+              data-role="remove-registrant"
+              data-id="${doc.id}"
+              data-userid="${reg.userId || ""}"
+              data-fullname="${escapeHtml(reg.fullName || "Unknown")}"
+              title="Remove from event">
+              🚫 Remove
+            </button>
           </div>
         `;
 
@@ -1773,6 +1782,110 @@ document.addEventListener("click", async (e) => {
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
+  }
+});
+
+/* =========================
+   ADMIN – REMOVE REGISTRANT
+   Frees up their slot (decrements the event's registeredCount if it has a
+   capacity limit) and sends them a message via the existing SK-office
+   thread system explaining why, so they can reply if they want it
+   reconsidered — reuses the messaging feature that already exists rather
+   than building a separate notification path.
+   ========================= */
+
+const removeRegistrantModal = document.getElementById("removeRegistrantModal");
+const removeRegistrantName = document.getElementById("removeRegistrantName");
+const removeRegistrantReason = document.getElementById("removeRegistrantReason");
+const confirmRemoveRegistrantBtn = document.getElementById("confirmRemoveRegistrantBtn");
+const cancelRemoveRegistrantBtn = document.getElementById("cancelRemoveRegistrantBtn");
+
+let removingRegistration = null; // { registrationId, userId, fullName }
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-role="remove-registrant"]');
+  if (!btn) return;
+
+  removingRegistration = {
+    registrationId: btn.dataset.id,
+    userId: btn.dataset.userid,
+    fullName: btn.dataset.fullname
+  };
+
+  const eventTitle = activeRegistrantsEventData?.title || "this event";
+  removeRegistrantName.textContent = removingRegistration.fullName;
+  removeRegistrantReason.value =
+    `We're unable to confirm you're a resident of Barangay 171 Bagumbong based on the ID on file, so we've removed your registration for "${eventTitle}". If you believe this is a mistake, please reply here with additional proof of residency and we'll take another look.`;
+
+  removeRegistrantModal?.classList.remove("hidden");
+});
+
+cancelRemoveRegistrantBtn?.addEventListener("click", () => {
+  removeRegistrantModal?.classList.add("hidden");
+  removingRegistration = null;
+});
+
+confirmRemoveRegistrantBtn?.addEventListener("click", async () => {
+  if (!removingRegistration || !activeRegistrantsEventId) return;
+
+  const reason = removeRegistrantReason.value.trim();
+  if (!reason) {
+    alert("Please enter a reason — it's sent to them as the message.");
+    return;
+  }
+  if (!removingRegistration.userId) {
+    alert("Couldn't find this registrant's account — try reopening the registrants list.");
+    return;
+  }
+
+  const admin = auth.currentUser;
+  confirmRemoveRegistrantBtn.disabled = true;
+
+  try {
+    let adminFullName = "SK Office";
+    try {
+      const adminDoc = await db.collection("users").doc(admin.uid).get();
+      adminFullName = adminDoc.exists ? (adminDoc.data().fullName || "SK Office") : "SK Office";
+    } catch (err) {
+      console.error("Failed to fetch admin name:", err);
+    }
+
+    const eventTitle = activeRegistrantsEventData?.title || "Event";
+    const threadRef = db.collection("threads").doc();
+    const messageRef = threadRef.collection("messages").doc();
+
+    const batch = db.batch();
+    batch.delete(db.collection("registrations").doc(removingRegistration.registrationId));
+    batch.update(db.collection("events").doc(activeRegistrantsEventId), {
+      registeredCount: firebase.firestore.FieldValue.increment(-1)
+    });
+    batch.set(threadRef, {
+      userId: removingRegistration.userId,
+      userFullName: removingRegistration.fullName,
+      subject: `Registration Removed – ${eventTitle}`,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastMessageText: reason,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      unreadByAdmin: false,
+      unreadByUser: true
+    });
+    batch.set(messageRef, {
+      senderId: admin.uid,
+      senderRole: "admin",
+      senderName: adminFullName,
+      text: reason,
+      sentAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+
+    removeRegistrantModal?.classList.add("hidden");
+    removingRegistration = null;
+  } catch (err) {
+    console.error("Failed to remove registrant:", err);
+    alert("Failed to remove this registrant. Please try again.");
+  } finally {
+    confirmRemoveRegistrantBtn.disabled = false;
   }
 });
 

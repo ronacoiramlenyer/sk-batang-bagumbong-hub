@@ -136,8 +136,11 @@ service cloud.firestore {
       // Only admins can update (e.g. marking attendance).
       allow update: if isAdmin();
 
-      // No deletes from the client — keep registrations as a permanent record.
-      allow delete: if false;
+      // Only admins can delete — used to remove a registrant from an event
+      // (e.g. residency couldn't be confirmed). The reason and timestamp
+      // still live on permanently as a message in a threads doc (see
+      // below), so removing one doesn't erase the record entirely.
+      allow delete: if isAdmin();
     }
 
     // ---------------------------
@@ -169,9 +172,11 @@ service cloud.firestore {
       allow read, update: if isAdmin() ||
         (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // Starting a new thread — must be the owner's own userId.
+      // Starting a new thread — must be the owner's own userId, unless an
+      // admin is opening one on a resident's behalf (e.g. the automatic
+      // "why you were removed from an event" message).
       allow create: if isSignedIn() &&
-        request.resource.data.userId == request.auth.uid;
+        (request.resource.data.userId == request.auth.uid || isAdmin());
 
       allow delete: if isAdmin();
 

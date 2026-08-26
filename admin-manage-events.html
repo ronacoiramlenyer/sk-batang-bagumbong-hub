@@ -122,6 +122,29 @@
       </div>
     </div>
 
+    <!-- REMOVE REGISTRANT MODAL -->
+    <div id="removeRegistrantModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Remove <span id="removeRegistrantName"></span> from this event</h3>
+        <p class="dashboard-subtext">
+          This frees up their slot and sends them a message explaining why,
+          from the SK office. They can reply to that message if they'd like
+          it reconsidered.
+        </p>
+
+        <label>Reason (sent to them as a message)</label>
+        <textarea id="removeRegistrantReason" rows="4"></textarea>
+
+        <button id="confirmRemoveRegistrantBtn" class="submit-btn">
+          Remove & Send Message
+        </button>
+
+        <span id="cancelRemoveRegistrantBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
+
 
 
 
