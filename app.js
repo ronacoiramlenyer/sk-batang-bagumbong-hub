@@ -45,6 +45,23 @@ function escapeHtml(value) {
 }
 
 /* =========================
+   LAST-NAME SORTING
+   Simple, explicit rule: split the full name on spaces and treat the
+   final word as the last name — used to sort user/registrant lists by
+   surname instead of by first name.
+   ========================= */
+function getLastName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/);
+  return (parts[parts.length - 1] || "").toLowerCase();
+}
+
+function sortByLastName(list, getFullName) {
+  return list.slice().sort((a, b) =>
+    getLastName(getFullName(a)).localeCompare(getLastName(getFullName(b)))
+  );
+}
+
+/* =========================
    PAGE DETECTION
    ========================= */
 
@@ -1644,7 +1661,9 @@ document.addEventListener("click", async (e) => {
         return;
       }
 
-      snapshot.forEach((doc) => {
+      const sortedDocs = sortByLastName(snapshot.docs, (doc) => doc.data().fullName);
+
+      sortedDocs.forEach((doc) => {
         const reg = doc.data();
 
         const row = document.createElement("div");
@@ -2221,9 +2240,8 @@ if (usersList) {
   }
 
   db.collection("users")
-    .orderBy("fullName")
     .onSnapshot((snapshot) => {
-      cachedUsers = snapshot.docs;
+      cachedUsers = sortByLastName(snapshot.docs, (doc) => doc.data().fullName);
       renderUsersList();
     }, (err) => {
       console.error("Failed to load users:", err);
