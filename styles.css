@@ -1326,6 +1326,18 @@ textarea {
   border: 1px solid #ddd;
 }
 
+.upload-card {
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 18px;
+  background: var(--gray, #f4f4f4);
+}
+
+.upload-card label {
+  margin-top: 0;
+}
+
 .photo-crop-viewport {
   position: relative;
   width: 280px;

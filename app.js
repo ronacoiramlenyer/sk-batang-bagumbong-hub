@@ -3986,17 +3986,27 @@ function renderIdApplicationStatus(data) {
         and ID below to be reviewed again.
       </p>
 
-      <label>Photo</label>
-      <p class="dashboard-subtext">
-        2x2 ID-style photo — square, plain background, your whole face
-        clearly visible. You'll be able to crop it after choosing a file.
-      </p>
-      <input id="idResubmitPhotoFile" type="file" accept="image/png, image/jpeg">
-      <img id="idResubmitPhotoPreview" class="template-preview hidden" alt="Photo preview">
+      <div class="upload-card">
+        <label>Photo</label>
+        <p class="dashboard-subtext">
+          2x2 ID-style photo — square, plain background, your whole face
+          clearly visible. You'll be able to crop it after choosing a file.
+        </p>
+        <input id="idResubmitPhotoFile" type="file" accept="image/png, image/jpeg">
+        <img id="idResubmitPhotoPreview" class="template-preview hidden" alt="Photo preview">
+      </div>
 
-      <label>Valid ID</label>
-      <input id="idResubmitDocFile" type="file" accept="image/png, image/jpeg">
-      <img id="idResubmitDocPreview" class="template-preview hidden" alt="ID preview">
+      <div class="upload-card">
+        <label>Proof of Residency</label>
+        <p class="dashboard-subtext">
+          Upload a valid ID showing your address, a proof of billing, or
+          another proof of residency — it must show the <strong>same last
+          name</strong> as this application. Applications that don't meet
+          this will be rejected.
+        </p>
+        <input id="idResubmitDocFile" type="file" accept="image/png, image/jpeg">
+        <img id="idResubmitDocPreview" class="template-preview hidden" alt="ID preview">
+      </div>
 
       <div id="idResubmitError" class="form-error hidden"></div>
 

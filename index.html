@@ -93,20 +93,27 @@
         <label>Contact Number</label>
         <input id="regContactNumber" type="tel" required>
 
-        <label>Photo</label>
-        <p class="dashboard-subtext">
-          2x2 ID-style photo — square, plain background, your whole face
-          clearly visible. You'll be able to crop it after choosing a file.
-        </p>
-        <input id="regPhotoFile" type="file" accept="image/png, image/jpeg" required>
-        <img id="regPhotoPreview" class="template-preview hidden" alt="Photo preview">
+        <div class="upload-card">
+          <label>Photo</label>
+          <p class="dashboard-subtext">
+            2x2 ID-style photo — square, plain background, your whole face
+            clearly visible. You'll be able to crop it after choosing a file.
+          </p>
+          <input id="regPhotoFile" type="file" accept="image/png, image/jpeg" required>
+          <img id="regPhotoPreview" class="template-preview hidden" alt="Photo preview">
+        </div>
 
-        <label>Valid ID (for identity verification)</label>
-        <input id="regIdDocumentFile" type="file" accept="image/png, image/jpeg" required>
-        <img id="regIdDocumentPreview" class="template-preview hidden" alt="ID preview">
-        <p class="dashboard-subtext">
-          Used by the SK office to confirm your details before approving your SK Barangay ID.
-        </p>
+        <div class="upload-card">
+          <label>Proof of Residency</label>
+          <p class="dashboard-subtext">
+            Upload a valid ID showing your address, a proof of billing, or
+            another proof of residency — it must show the <strong>same last
+            name</strong> as this application. Applications that don't meet
+            this will be rejected.
+          </p>
+          <input id="regIdDocumentFile" type="file" accept="image/png, image/jpeg" required>
+          <img id="regIdDocumentPreview" class="template-preview hidden" alt="ID preview">
+        </div>
 
         <div id="registerError" class="form-error hidden"></div>
 
