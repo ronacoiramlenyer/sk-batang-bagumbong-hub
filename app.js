@@ -2760,6 +2760,10 @@ const adminChatThread = document.getElementById("adminChatThread");
 const adminChatSendForm = document.getElementById("adminChatSendForm");
 const adminChatMessageInput = document.getElementById("adminChatMessageInput");
 const closeChatThreadModal = document.getElementById("closeChatThreadModal");
+const deleteConversationBtn = document.getElementById("deleteConversationBtn");
+const deleteConversationModal = document.getElementById("deleteConversationModal");
+const confirmDeleteConversationBtn = document.getElementById("confirmDeleteConversationBtn");
+const cancelDeleteConversationBtn = document.getElementById("cancelDeleteConversationBtn");
 
 let activeThreadId = null;
 let activeThreadUnsubscribe = null;
@@ -2816,15 +2820,20 @@ if (conversationsList) {
 }
 
 // Open a thread
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const card = e.target.closest('[data-role="open-conversation"]');
   if (!card) return;
+
+  await ensureCurrentUserRole();
 
   activeThreadId = card.dataset.id;
   const subject = card.dataset.subject || "Conversation";
   const name = card.dataset.name || "Unknown";
   chatThreadUserName.textContent = `${subject} — from ${name}`;
   adminChatThread.innerHTML = '<p class="dashboard-subtext">Loading…</p>';
+  if (deleteConversationBtn) {
+    deleteConversationBtn.style.display = currentUserRole === "superadmin" ? "" : "none";
+  }
   chatThreadModal?.classList.remove("hidden");
 
   const threadRef = db.collection("threads").doc(activeThreadId);
@@ -2854,6 +2863,54 @@ closeChatThreadModal?.addEventListener("click", () => {
     activeThreadUnsubscribe = null;
   }
   activeThreadId = null;
+});
+
+deleteConversationBtn?.addEventListener("click", () => {
+  if (!activeThreadId) return;
+  deleteConversationModal?.classList.remove("hidden");
+});
+
+cancelDeleteConversationBtn?.addEventListener("click", () => {
+  deleteConversationModal?.classList.add("hidden");
+});
+
+confirmDeleteConversationBtn?.addEventListener("click", async () => {
+  if (!activeThreadId) return;
+
+  confirmDeleteConversationBtn.disabled = true;
+
+  try {
+    const threadRef = db.collection("threads").doc(activeThreadId);
+
+    // Deleting the thread doc doesn't cascade to its messages
+    // subcollection — Firestore never deletes subcollections
+    // automatically — so those have to be deleted explicitly first.
+    // Batched in chunks of 500 (Firestore's per-batch write limit),
+    // though a real conversation here is nowhere near that size.
+    const messagesSnap = await threadRef.collection("messages").get();
+    const messageDocs = messagesSnap.docs;
+
+    for (let i = 0; i < messageDocs.length; i += 500) {
+      const batch = db.batch();
+      messageDocs.slice(i, i + 500).forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    await threadRef.delete();
+
+    deleteConversationModal?.classList.add("hidden");
+    chatThreadModal?.classList.add("hidden");
+    if (activeThreadUnsubscribe) {
+      activeThreadUnsubscribe();
+      activeThreadUnsubscribe = null;
+    }
+    activeThreadId = null;
+  } catch (err) {
+    console.error("Failed to delete conversation:", err);
+    alert("Failed to delete this conversation. Please try again.");
+  } finally {
+    confirmDeleteConversationBtn.disabled = false;
+  }
 });
 
 adminChatSendForm?.addEventListener("submit", async (e) => {

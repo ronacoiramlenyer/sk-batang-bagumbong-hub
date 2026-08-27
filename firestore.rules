@@ -217,7 +217,9 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         (request.resource.data.userId == request.auth.uid || isAdmin());
 
-      allow delete: if isAdmin();
+      // Deleting a whole conversation is super-admin-only (same tier as
+      // deleting a user) — not exposed to a regular admin.
+      allow delete: if isSuperAdmin();
 
       match /messages/{messageId} {
         // Ownership is checked via the parent thread doc, since threadId
@@ -232,8 +234,11 @@ service cloud.firestore {
            get(/databases/$(database)/documents/threads/$(threadId)).data.userId == request.auth.uid)) &&
           request.resource.data.senderId == request.auth.uid;
 
-        // Messages are immutable once sent.
-        allow update, delete: if false;
+        // Immutable once sent — never editable. Deletable only as part of
+        // a super admin deleting the whole conversation above (individual
+        // messages can't be picked off one at a time).
+        allow update: if false;
+        allow delete: if isSuperAdmin();
       }
     }
 

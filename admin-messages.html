@@ -35,7 +35,31 @@
           <button type="submit" class="submit-btn">Send</button>
         </form>
 
+        <button id="deleteConversationBtn" type="button" class="submit-btn secondary" style="margin-top:10px;">
+          🗑️ Delete Conversation
+        </button>
+
         <span id="closeChatThreadModal" class="back-link">Close</span>
+      </div>
+    </div>
+
+    <!-- DELETE CONVERSATION MODAL -->
+    <div id="deleteConversationModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Delete Conversation</h3>
+        <p>
+          This will permanently remove this entire conversation, including
+          every message in it.<br>
+          This cannot be undone.
+        </p>
+
+        <button id="confirmDeleteConversationBtn" class="submit-btn">
+          Delete Conversation
+        </button>
+
+        <span id="cancelDeleteConversationBtn" class="back-link">
+          Cancel
+        </span>
       </div>
     </div>
 
