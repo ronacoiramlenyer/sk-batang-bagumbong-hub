@@ -30,6 +30,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin';
     }
 
+    // Helper: has this event's optional registrationOpensAt passed yet?
+    // request.time is the server's own clock — untamperable by the client,
+    // unlike anything computed from new Date() in the app's JS — which is
+    // what makes this the actual enforcement rather than just a UI nicety.
+    function eventRegistrationIsOpen(eventId) {
+      let opensAt = get(/databases/$(database)/documents/events/$(eventId)).data.get('registrationOpensAt', null);
+      return opensAt == null || request.time >= opensAt;
+    }
+
     // ---------------------------
     // users/{userId}
     // ---------------------------
@@ -158,14 +167,18 @@ service cloud.firestore {
 
       // A user can only create a registration for themselves, and only
       // once their SK Barangay ID is approved (admins are exempt — they
-      // don't go through that process). This is the authoritative check;
-      // the app also disables the Join button client-side for a clean
-      // message instead of a dead click, but this is what actually stops
-      // someone from bypassing that by calling Firestore directly.
+      // don't go through that process) AND the event's optional
+      // registration-opens-at time has actually passed on the server's
+      // clock. This is the authoritative check for both; the app also
+      // disables the Join button client-side for a clean message instead
+      // of a dead click, but this is what actually stops someone from
+      // bypassing either by calling Firestore directly (e.g. by setting
+      // their device's clock forward).
       allow create: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid &&
         (isAdmin() ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.idStatus == 'approved');
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.idStatus == 'approved') &&
+        eventRegistrationIsOpen(request.resource.data.eventId);
 
       // Admins can update (e.g. marking attendance), except changing the
       // `removed` flag itself — removing or restoring a registrant — which

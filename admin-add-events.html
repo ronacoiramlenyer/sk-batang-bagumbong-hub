@@ -39,6 +39,14 @@
         <label>Max Participants (optional)</label>
         <input type="number" id="eventCapacity" min="1" step="1" placeholder="Leave blank for no limit">
 
+        <label>Registration Opens At (optional)</label>
+        <input type="datetime-local" id="eventRegistrationOpensAt">
+        <p class="dashboard-subtext">
+          Leave blank to allow joining as soon as the event is posted.
+          Otherwise, Join stays locked for everyone until this exact date
+          and time.
+        </p>
+
         <div class="form-actions">
           <button type="submit" class="submit-btn">
             Create Event

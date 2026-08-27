@@ -68,6 +68,13 @@
           <label>Max Participants (optional)</label>
           <input type="number" id="editCapacity" min="1" step="1" placeholder="Leave blank for no limit">
 
+          <label>Registration Opens At (optional)</label>
+          <input type="datetime-local" id="editRegistrationOpensAt">
+          <p class="dashboard-subtext">
+            Leave blank to allow joining any time. Otherwise, Join stays
+            locked for everyone until this exact date and time.
+          </p>
+
           <button type="submit" class="submit-btn">
             Save Changes
           </button>

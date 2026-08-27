@@ -599,7 +599,15 @@ completeProfileForm?.addEventListener("submit", async (e) => {
    ========================= */
 
 function todayDateStr() {
-  return new Date().toISOString().slice(0, 10);
+  // Local date components, not toISOString() (which converts to UTC first)
+  // — for a Philippines-based (UTC+8) user, toISOString() reads as
+  // "yesterday" for several hours every morning, silently flipping event
+  // statuses a day early/late right around that boundary.
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // What the status SHOULD read as right now, given the event's date —
@@ -626,6 +634,31 @@ function getCapacityInfo(event) {
     remaining: capacity != null ? Math.max(0, capacity - registeredCount) : null,
     isFull: capacity != null && registeredCount >= capacity
   };
+}
+
+// Registration lock is optional per event (null/undefined = joinable any
+// time). This client-side check is only for a clear "opens on..." message
+// and disabling the button — it's the Firestore rule on the registration
+// create itself (checked against the server's clock, not this device's)
+// that actually enforces it, same reasoning as the ID-approval gate.
+function getJoinLockInfo(event) {
+  if (!event.registrationOpensAt) {
+    return { isLocked: false, opensAt: null };
+  }
+  const opensAt = event.registrationOpensAt.toDate();
+  return { isLocked: new Date() < opensAt, opensAt };
+}
+
+// Firestore Timestamp -> the "YYYY-MM-DDTHH:mm" string a
+// <input type="datetime-local"> expects, in local time (matching how the
+// value was originally entered and how `new Date(...)` re-parses it).
+function toDatetimeLocalValue(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
 /* =========================
@@ -688,6 +721,7 @@ if (createEventForm) {
     const timeInput = document.getElementById("eventTime");
     const locationInput = document.getElementById("eventLocation");
     const capacityInput = document.getElementById("eventCapacity");
+    const registrationOpensAtInput = document.getElementById("eventRegistrationOpensAt");
 
     const title = titleInput.value.trim();
     const description = descriptionInput.value.trim();
@@ -698,6 +732,13 @@ if (createEventForm) {
     // treat it the same as "no limit" rather than an event no one can join.
     const capacityRaw = parseInt(capacityInput.value, 10);
     const capacity = (capacityInput.value.trim() && capacityRaw > 0) ? capacityRaw : null;
+    // Blank = joinable immediately. datetime-local gives local wall-clock
+    // time with no timezone info, so `new Date(...)` parses it as the
+    // browser's own local time zone — correct for a single-timezone
+    // barangay-local app.
+    const registrationOpensAt = registrationOpensAtInput.value
+      ? new Date(registrationOpensAtInput.value)
+      : null;
 
     if (!title || !date || !time || !location) {
       alert("Please complete all required fields.");
@@ -718,6 +759,7 @@ if (createEventForm) {
         time,
         location,
         capacity,
+        registrationOpensAt,
         registeredCount: 0,
         createdBy: user.uid,
         status: "upcoming",
@@ -1800,6 +1842,9 @@ document.addEventListener("click", async (e) => {
     editTime.value = data.time || "";
     editLocation.value = data.location || "";
     editCapacity.value = data.capacity || "";
+    editRegistrationOpensAt.value = data.registrationOpensAt
+      ? toDatetimeLocalValue(data.registrationOpensAt.toDate())
+      : "";
 
     editEventModal.classList.remove("hidden");
   } catch (err) {
@@ -1824,6 +1869,9 @@ if (editEventForm) {
     try {
       const editCapacityRaw = parseInt(editCapacity.value, 10);
       const editCapacityValue = (editCapacity.value.trim() && editCapacityRaw > 0) ? editCapacityRaw : null;
+      const editRegistrationOpensAtValue = editRegistrationOpensAt.value
+        ? new Date(editRegistrationOpensAt.value)
+        : null;
 
       await db.collection("events").doc(editingEventId).update({
         title: editTitle.value.trim(),
@@ -1831,7 +1879,8 @@ if (editEventForm) {
         date: editDate.value,
         time: editTime.value,
         location: editLocation.value,
-        capacity: editCapacityValue
+        capacity: editCapacityValue,
+        registrationOpensAt: editRegistrationOpensAtValue
       });
 
       editEventModal.classList.add("hidden");
@@ -3395,6 +3444,8 @@ if (userEventList) {
           // "Joined ✓" above regardless of their current ID status, so
           // this never touches existing registrants.
           const needsApproval = !isJoined && !myIdApprovedOrAdmin;
+          const joinLock = getJoinLockInfo(event);
+          const isLocked = joinLock.isLocked && !isJoined;
 
           const card = document.createElement("div");
           card.className = "event-card";
@@ -3402,6 +3453,7 @@ if (userEventList) {
           let buttonLabel = "Join Event";
           if (isJoined) buttonLabel = "Joined ✓";
           else if (isRemoved) buttonLabel = "Removed";
+          else if (isLocked) buttonLabel = "Not yet open";
           else if (needsApproval) buttonLabel = "ID approval required";
           else if (isFull) buttonLabel = "Full";
 
@@ -3416,12 +3468,17 @@ if (userEventList) {
                 👥 You were removed from this event — see Messages for why, or reply there to have it reconsidered.
               </p>
             ` : ""}
-            ${needsApproval && !isRemoved ? `
+            ${isLocked && !isRemoved ? `
+              <p class="event-meta">
+                🔒 Registration opens ${joinLock.opensAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+              </p>
+            ` : ""}
+            ${needsApproval && !isRemoved && !isLocked ? `
               <p class="event-meta">
                 👥 Your SK Barangay ID needs to be approved before you can join events — check your Profile page.
               </p>
             ` : ""}
-            ${capacityInfo.hasLimit && !isJoined && !isRemoved && !needsApproval ? `
+            ${capacityInfo.hasLimit && !isJoined && !isRemoved && !needsApproval && !isLocked ? `
               <p class="event-meta">
                 ${isFull ? "👥 Event full" : `👥 ${capacityInfo.remaining} slot${capacityInfo.remaining === 1 ? "" : "s"} left`}
               </p>
@@ -3430,7 +3487,7 @@ if (userEventList) {
             <button type="button"
               class="action-card small"
               data-id="${doc.id}"
-              ${isJoined || isFull || isRemoved || needsApproval ? "disabled" : ""}>
+              ${isJoined || isFull || isRemoved || needsApproval || isLocked ? "disabled" : ""}>
               ${buttonLabel}
             </button>
           `;
@@ -3465,6 +3522,18 @@ document.addEventListener("click", async (e) => {
       alert("Your SK Barangay ID needs to be approved before you can join events.");
       btn.disabled = false;
       btn.textContent = "ID approval required";
+      return;
+    }
+
+    // Same belt-and-suspenders reasoning as the ID-approval check above —
+    // the Firestore rule (checked against the server's clock) is what
+    // actually enforces this.
+    const eventSnapshot = await db.collection("events").doc(eventId).get();
+    const eventLockInfo = eventSnapshot.exists ? getJoinLockInfo(eventSnapshot.data()) : { isLocked: false };
+    if (eventLockInfo.isLocked) {
+      alert(`Registration for this event opens ${eventLockInfo.opensAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`);
+      btn.disabled = false;
+      btn.textContent = "Not yet open";
       return;
     }
 
