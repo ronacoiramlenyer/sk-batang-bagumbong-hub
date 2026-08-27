@@ -1943,7 +1943,12 @@ document.addEventListener("click", async (e) => {
       if (!registrantsList) return;
       registrantsList.innerHTML = "";
 
-      activeRegistrantsData = snapshot.docs.map((d) => d.data());
+      // Excludes removed registrants — activeRegistrantsData feeds the CSV
+      // export (and certificate generation), and someone removed from the
+      // event shouldn't show up as if they were still registered.
+      activeRegistrantsData = snapshot.docs
+        .map((d) => d.data())
+        .filter((reg) => !reg.removed);
 
       if (snapshot.empty) {
         registrantsList.innerHTML =
@@ -2316,6 +2321,9 @@ generateAllCertificatesBtn?.addEventListener("click", async () => {
       .where("eventId", "==", activeRegistrantsEventId)
       .where("attended", "==", true)
       .get();
+    // A removed registrant who'd already been marked attended before
+    // removal shouldn't still get a certificate.
+    snap = { docs: snap.docs.filter((d) => !d.data().removed) };
   } catch (err) {
     console.error("Failed to load attended registrants:", err);
     alert("Couldn't load the attended registrant list.");
