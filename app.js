@@ -3066,7 +3066,7 @@ async function assignIdNumber(userId) {
   const userRef = db.collection("users").doc(userId);
   const admin = auth.currentUser;
 
-  return db.runTransaction(async (tx) => {
+  const runOnce = () => db.runTransaction(async (tx) => {
     const counterDoc = await tx.get(counterRef);
     const lastNumber = counterDoc.exists ? (counterDoc.data().lastNumber || 0) : 0;
     const nextNumber = lastNumber + 1;
@@ -3083,6 +3083,25 @@ async function assignIdNumber(userId) {
 
     return idNumber;
   });
+
+  // settings/idCounter is a small, rarely-written document. Firestore
+  // rate-limits bursts of traffic against a document that hasn't built up
+  // write history yet (documented Firestore behavior, not a bug) — shows
+  // up as an occasional 429 when approvals happen close together (e.g.
+  // during testing), and reliably resolves itself moments later. Retrying
+  // automatically means the admin doesn't see a scary error for something
+  // that would have worked fine one second later anyway.
+  const retryDelaysMs = [500, 1500, 3000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runOnce();
+    } catch (err) {
+      const isRateLimited = /429|resource-exhausted/i.test(err && err.message || "");
+      if (!isRateLimited || attempt >= retryDelaysMs.length) throw err;
+      console.warn(`ID counter rate-limited, retrying in ${retryDelaysMs[attempt]}ms…`, err);
+      await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+    }
+  }
 }
 
 // Approve (also used to reverse a rejection — assigns/reassigns an ID
@@ -3091,11 +3110,17 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-role="approve-id"]');
   if (!btn || btn.disabled) return;
 
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = "Approving…";
+
   try {
     await assignIdNumber(btn.dataset.id);
   } catch (err) {
     console.error("Failed to approve applicant:", err);
     alert("Failed to update status.");
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
   }
 });
 
