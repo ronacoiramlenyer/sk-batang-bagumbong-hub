@@ -139,8 +139,11 @@ service cloud.firestore {
     match /events/{eventId} {
       // Any signed-in user can read events.
       allow read: if isSignedIn();
-      // Only admins can create or delete events.
-      allow create, delete: if isAdmin();
+      // Any admin can create an event, but deleting one (permanent, and
+      // cascades to its registrations client-side) is super-admin-only —
+      // same tier as deleting a user or a conversation.
+      allow create: if isAdmin();
+      allow delete: if isSuperAdmin();
 
       // Admins can edit anything. A non-admin registering for the event is
       // allowed exactly one kind of update: bumping registeredCount by 1,
@@ -187,10 +190,12 @@ service cloud.firestore {
         (isAdmin() &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['removed']));
 
-      // No client deletes — removal is a soft `removed` flag above (see
-      // the reason preserved permanently as a message in a threads doc),
-      // not an actual delete. Kept denied here for defense in depth.
-      allow delete: if false;
+      // Individual removal is the soft `removed` flag above, not an actual
+      // delete (see the reason preserved permanently as a message in a
+      // threads doc) — an actual delete here only ever happens as part of
+      // a super admin deleting the whole event (cascading cleanup so
+      // registrations don't get orphaned pointing at a deleted event).
+      allow delete: if isSuperAdmin();
     }
 
     // ---------------------------

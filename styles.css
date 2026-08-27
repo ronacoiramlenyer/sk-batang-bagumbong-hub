@@ -1034,6 +1034,10 @@ textarea {
   border-color: #999;
 }
 
+.icon-btn.danger {
+  border-color: #b00020;
+}
+
 /* Hover (when enabled later) */
 .icon-btn:hover:not(:disabled) {
   background: var(--green-primary);
@@ -1046,6 +1050,11 @@ textarea {
 
 .icon-btn.archive:hover:not(:disabled) {
   background: #777;
+  color: var(--light);
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  background: #b00020;
   color: var(--light);
 }
 

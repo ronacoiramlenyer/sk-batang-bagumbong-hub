@@ -1658,12 +1658,13 @@ if (announcementList) {
 const adminEventList = document.getElementById("adminEventList");
 
 if (adminEventList) {
-  db.collection("events")
-    .orderBy("date", "desc")
-    .onSnapshot((snapshot) => {
+  ensureCurrentUserRole().then(() => {
+    db.collection("events")
+      .orderBy("date", "desc")
+      .onSnapshot((snapshot) => {
 
-      // Clear list
-      adminEventList.innerHTML = "";
+        // Clear list
+        adminEventList.innerHTML = "";
 
       if (snapshot.empty) {
         adminEventList.innerHTML =
@@ -1740,13 +1741,23 @@ if (adminEventList) {
                 🧾
                 <span>Registrants</span>
               </button>
+
+              ${currentUserRole === "superadmin" && displayStatus === "archived" ? `
+                <button class="icon-btn danger"
+                  data-role="delete-event" data-id="${doc.id}" data-title="${escapeHtml(event.title)}"
+                  title="Delete Event">
+                  🗑️
+                  <span>Delete Event</span>
+                </button>
+              ` : ""}
             </div>
           </div>
         `;
 
         adminEventList.appendChild(card);
       });
-    });
+      });
+  });
 }
 
 
@@ -1938,6 +1949,72 @@ if (confirmArchiveBtn) {
     }
   });
 }
+
+/* =========================
+   ADMIN – DELETE EVENT (super admin only, archived events only)
+   Cascades to every registration for the event first — Firestore never
+   deletes subcollections/related docs automatically, and leaving them
+   behind would orphan them (pointing at an eventId that no longer
+   exists), degrading things like a resident's own certificate list.
+   ========================= */
+
+const deleteEventModal = document.getElementById("deleteEventModal");
+const deleteEventTitle = document.getElementById("deleteEventTitle");
+const confirmDeleteEventBtn = document.getElementById("confirmDeleteEventBtn");
+const cancelDeleteEventBtn = document.getElementById("cancelDeleteEventBtn");
+
+let deletingEventId = null;
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest('[data-role="delete-event"]');
+  if (!btn) return;
+
+  deletingEventId = btn.dataset.id;
+  deleteEventTitle.textContent = btn.dataset.title || "this event";
+
+  try {
+    const regsSnap = await db.collection("registrations").where("eventId", "==", deletingEventId).get();
+    deleteEventWarning.textContent = regsSnap.size > 0
+      ? `This will permanently remove the event and all ${regsSnap.size} registration(s) tied to it — including attendance records, so anyone who attended loses their certificate eligibility for it too. This cannot be undone.`
+      : "This will permanently remove the event. It has no registrations. This cannot be undone.";
+  } catch (err) {
+    console.error("Failed to check registrant count:", err);
+  }
+
+  deleteEventModal?.classList.remove("hidden");
+});
+
+cancelDeleteEventBtn?.addEventListener("click", () => {
+  deleteEventModal?.classList.add("hidden");
+  deletingEventId = null;
+});
+
+confirmDeleteEventBtn?.addEventListener("click", async () => {
+  if (!deletingEventId) return;
+
+  confirmDeleteEventBtn.disabled = true;
+
+  try {
+    const regsSnap = await db.collection("registrations").where("eventId", "==", deletingEventId).get();
+    const regDocs = regsSnap.docs;
+
+    for (let i = 0; i < regDocs.length; i += 500) {
+      const batch = db.batch();
+      regDocs.slice(i, i + 500).forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    await db.collection("events").doc(deletingEventId).delete();
+
+    deleteEventModal?.classList.add("hidden");
+    deletingEventId = null;
+  } catch (err) {
+    console.error("Failed to delete event:", err);
+    alert("Failed to delete this event. Please try again.");
+  } finally {
+    confirmDeleteEventBtn.disabled = false;
+  }
+});
 
 
 
@@ -4393,7 +4470,13 @@ if (myCertificatesList) {
       return;
     }
 
-    if (snap.empty) {
+    // Someone removed from an event after attending (e.g. a residency
+    // issue found afterward) shouldn't still be able to pull a
+    // certificate for it — same fix already applied to the CSV export
+    // and bulk certificate generation.
+    const certDocs = snap.docs.filter((d) => !d.data().removed);
+
+    if (certDocs.length === 0) {
       myCertificatesList.innerHTML =
         '<p class="dashboard-subtext">No certificates yet.</p>';
       return;
@@ -4401,7 +4484,7 @@ if (myCertificatesList) {
 
     myCertificatesList.innerHTML = "";
 
-    for (const doc of snap.docs) {
+    for (const doc of certDocs) {
       const reg = doc.data();
 
       let event = { title: "Event", date: "" };

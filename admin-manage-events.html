@@ -103,6 +103,27 @@
       </div>
     </div>
 
+    <!-- DELETE EVENT MODAL -->
+    <div id="deleteEventModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Delete <span id="deleteEventTitle"></span></h3>
+        <p id="deleteEventWarning">
+          This will permanently remove the event and every registration
+          tied to it — including attendance records, so anyone who
+          attended loses their certificate eligibility for it too.<br>
+          This cannot be undone.
+        </p>
+
+        <button id="confirmDeleteEventBtn" class="submit-btn">
+          Delete Event
+        </button>
+
+        <span id="cancelDeleteEventBtn" class="back-link">
+          Cancel
+        </span>
+      </div>
+    </div>
+
     <!-- REGISTRANTS / ATTENDANCE MODAL -->
     <div id="registrantsModal" class="modal hidden">
       <div class="modal-content registrants-content">
