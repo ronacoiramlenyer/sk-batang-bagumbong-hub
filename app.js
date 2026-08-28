@@ -3241,10 +3241,31 @@ function scrambleIdCounter(counter) {
   return String(scrambled + 100000);
 }
 
+// Firestore's actual limit on settings/idCounter isn't just a "cold
+// document" thing — a single document can only sustain about 1 write per
+// second, permanently. Approving several applications back-to-back (which
+// is the normal way to clear a Pending queue) writes to that same counter
+// doc faster than that, so retrying after the fact isn't enough on its
+// own: this queue also enforces a minimum gap between writes so a rapid
+// run of approvals never hits the limit to begin with. The retry loop
+// below stays as a fallback for the rarer case of a second admin session
+// touching the same counter at the same moment.
+let idCounterQueue = Promise.resolve();
+let lastIdCounterWriteAt = 0;
+const ID_COUNTER_MIN_GAP_MS = 1100;
+
 // Assigns the next ID number using a transaction against a shared counter
 // doc, so concurrent approvals can't collide on the same number. Targets
 // the user's own profile doc.
-async function assignIdNumber(userId) {
+function assignIdNumber(userId) {
+  const task = idCounterQueue.then(() => assignIdNumberNow(userId));
+  // Chain the next call after this one regardless of outcome, so one
+  // failed approval doesn't jam up everything queued behind it.
+  idCounterQueue = task.catch(() => {});
+  return task;
+}
+
+async function assignIdNumberNow(userId) {
   const counterRef = db.collection("settings").doc("idCounter");
   const userRef = db.collection("users").doc(userId);
   const admin = auth.currentUser;
@@ -3267,18 +3288,20 @@ async function assignIdNumber(userId) {
     return idNumber;
   });
 
-  // settings/idCounter is a small, rarely-written document. Firestore
-  // rate-limits bursts of traffic against a document that hasn't built up
-  // write history yet (documented Firestore behavior, not a bug) — shows
-  // up as an occasional 429 when approvals happen close together (e.g.
-  // during testing), and reliably resolves itself moments later. Retrying
-  // automatically means the admin doesn't see a scary error for something
-  // that would have worked fine one second later anyway.
-  const retryDelaysMs = [500, 1500, 3000];
+  const retryDelaysMs = [800, 2000, 4000, 6000];
   for (let attempt = 0; ; attempt++) {
+    // Never even attempt a write within ID_COUNTER_MIN_GAP_MS of the last
+    // one — this is what actually keeps a fast run of approvals under
+    // Firestore's per-document sustained write limit.
+    const waitMs = ID_COUNTER_MIN_GAP_MS - (Date.now() - lastIdCounterWriteAt);
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+
     try {
-      return await runOnce();
+      const result = await runOnce();
+      lastIdCounterWriteAt = Date.now();
+      return result;
     } catch (err) {
+      lastIdCounterWriteAt = Date.now();
       const isRateLimited = /429|resource-exhausted/i.test(err && err.message || "");
       if (!isRateLimited || attempt >= retryDelaysMs.length) throw err;
       console.warn(`ID counter rate-limited, retrying in ${retryDelaysMs[attempt]}ms…`, err);
